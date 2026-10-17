@@ -1,7 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { FORM_INFO, formOf, GOD_LEVEL, GODS, SKILLS, UPGRADES, upgradeCost, xpToNext } from '../game/balance';
-import { canBuy, canCast, formName } from '../game/engine';
+import { bulkPlan, canCast, formName } from '../game/engine';
 import { formatNumber } from '../game/format';
 import { GameState, SkillId, UpgradeId } from '../game/types';
 import { colors } from './theme';
@@ -68,13 +68,43 @@ export function SkillBar({ state, onCast }: { state: GameState; onCast: (id: Ski
 }
 
 /** 골드 강화 목록 */
-export function UpgradeList({ state, onBuy }: { state: GameState; onBuy: (id: UpgradeId) => void }) {
+export const BUY_AMOUNTS = [1, 10, 50, 100];
+
+interface UpgradeListProps {
+  state: GameState;
+  buyAmount: number;
+  onChangeAmount: (amount: number) => void;
+  onBuy: (id: UpgradeId) => void;
+}
+
+export function UpgradeList({ state, buyAmount, onChangeAmount, onBuy }: UpgradeListProps) {
   return (
     <View style={styles.upgrades}>
+      <View style={styles.amountRow}>
+        <Text style={styles.amountLabel}>강화</Text>
+        {BUY_AMOUNTS.map((n) => (
+          <Pressable
+            key={n}
+            onPress={() => onChangeAmount(n)}
+            accessibilityRole="button"
+            accessibilityState={{ selected: n === buyAmount }}
+            style={[styles.amount, n === buyAmount && styles.amountSelected]}
+          >
+            <Text style={[styles.amountText, n === buyAmount && styles.amountTextSelected]}>×{n}</Text>
+          </Pressable>
+        ))}
+      </View>
       {UPGRADES.map((u) => {
         const level = state.levels[u.id];
         const maxed = level >= u.maxLevel;
-        const affordable = canBuy(state, u.id);
+        const plan = bulkPlan(state, u.id, buyAmount);
+        const affordable = plan.count > 0;
+        // 살 수 있으면 "+단계 수 · 총 가격", 못 사면 다음 1단계 가격을 보여준다
+        const label = maxed
+          ? 'MAX'
+          : affordable
+            ? `${buyAmount > 1 ? `+${plan.count} · ` : ''}💰 ${formatNumber(plan.cost)}`
+            : `💰 ${formatNumber(upgradeCost(u.id, level))}`;
         return (
           <View key={u.id} style={styles.upgradeRow}>
             <Text style={styles.upgradeEmoji}>{u.emoji}</Text>
@@ -90,7 +120,7 @@ export function UpgradeList({ state, onBuy }: { state: GameState; onBuy: (id: Up
               accessibilityRole="button"
               style={({ pressed }) => [styles.buy, !affordable && styles.buyDisabled, pressed && { opacity: 0.7 }]}
             >
-              <Text style={styles.buyText}>{maxed ? 'MAX' : `💰 ${formatNumber(upgradeCost(u.id, level))}`}</Text>
+              <Text style={styles.buyText}>{label}</Text>
             </Pressable>
           </View>
         );
@@ -127,12 +157,18 @@ const styles = StyleSheet.create({
   skillDesc: { color: 'rgba(255,255,255,0.8)', fontSize: 11, marginTop: 2 },
 
   upgrades: { backgroundColor: colors.panel, borderRadius: 14, padding: 6, marginTop: 12 },
+  amountRow: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingTop: 8, paddingBottom: 4 },
+  amountLabel: { color: colors.text, fontWeight: '800', fontSize: 15, marginRight: 'auto' },
+  amount: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, backgroundColor: colors.panelLight },
+  amountSelected: { backgroundColor: colors.gold },
+  amountText: { color: colors.subText, fontWeight: '800', fontSize: 13 },
+  amountTextSelected: { color: colors.background },
   upgradeRow: { flexDirection: 'row', alignItems: 'center', padding: 10, gap: 10 },
   upgradeEmoji: { fontSize: 24 },
   upgradeName: { color: colors.text, fontWeight: '700', fontSize: 15 },
   upgradeLevel: { color: colors.subText, fontWeight: '600', fontSize: 13 },
   upgradeDesc: { color: colors.subText, fontSize: 12, marginTop: 2 },
-  buy: { backgroundColor: colors.primary, borderRadius: 10, paddingVertical: 9, minWidth: 92, alignItems: 'center' },
+  buy: { backgroundColor: colors.primary, borderRadius: 10, paddingVertical: 9, paddingHorizontal: 8, minWidth: 104, alignItems: 'center' },
   buyDisabled: { backgroundColor: colors.disabled },
   buyText: { color: '#fff', fontWeight: '800', fontSize: 13 },
 });

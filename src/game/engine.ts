@@ -175,9 +175,33 @@ export function canBuy(state: GameState, id: UpgradeId): boolean {
 }
 
 export function buyUpgrade(state: GameState, id: UpgradeId): GameState {
-  if (!canBuy(state, id)) return state;
-  const cost = upgradeCost(id, state.levels[id]);
-  return { ...state, gold: state.gold - cost, levels: { ...state.levels, [id]: state.levels[id] + 1 } };
+  return buyUpgradeBulk(state, id, 1);
+}
+
+/**
+ * 최대 maxCount단계까지 살 때 실제로 몇 단계를, 얼마에 살 수 있는지 계산한다.
+ * 레벨마다 가격이 다르므로(1.x^레벨) 한 단계씩 더해 보면서 돈이 모자라면 멈춘다.
+ */
+export function bulkPlan(state: GameState, id: UpgradeId, maxCount: number): { count: number; cost: number } {
+  const maxLevel = findUpgrade(id).maxLevel;
+  let level = state.levels[id];
+  let count = 0;
+  let cost = 0;
+  while (count < maxCount && level < maxLevel) {
+    const next = upgradeCost(id, level);
+    if (cost + next > state.gold) break;
+    cost += next;
+    level++;
+    count++;
+  }
+  return { count, cost };
+}
+
+/** 한 번에 여러 단계 강화. 돈이 모자라면 살 수 있는 만큼만 산다. */
+export function buyUpgradeBulk(state: GameState, id: UpgradeId, maxCount: number): GameState {
+  const { count, cost } = bulkPlan(state, id, maxCount);
+  if (count === 0) return state;
+  return { ...state, gold: state.gold - cost, levels: { ...state.levels, [id]: state.levels[id] + count } };
 }
 
 /** 보스에게 졌을 때 누르는 "보스 재도전" 버튼 */

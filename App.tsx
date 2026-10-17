@@ -12,7 +12,7 @@ import {
 } from './src/game/types';
 import {
   applyOfflineReward,
-  buyUpgrade,
+  buyUpgradeBulk,
   castSkill,
   challengeBoss,
   chooseGod,
@@ -51,6 +51,7 @@ export default function App() {
   const lastHitAt = useRef(0);
   const [offline, setOffline] = useState<OfflineReward | null>(null);
   const [evolved, setEvolved] = useState(false);
+  const [buyAmount, setBuyAmount] = useState(1); // 강화 한 번에 몇 단계씩 살지 (×1/×10/×50/×100)
 
   /** 엔진이 돌려준 결과를 화면 상태에 반영한다. 모든 행동이 이 함수를 거친다. */
   const apply = useCallback((r: ActionResult) => {
@@ -138,7 +139,12 @@ export default function App() {
             onChallengeBoss={() => act(challengeBoss)}
           />
           <SkillBar state={game} onCast={(id: SkillId) => gameRef.current && apply(castSkill(gameRef.current, id))} />
-          <UpgradeList state={game} onBuy={(id: UpgradeId) => act((s) => buyUpgrade(s, id))} />
+          <UpgradeList
+            state={game}
+            buyAmount={buyAmount}
+            onChangeAmount={setBuyAmount}
+            onBuy={(id: UpgradeId) => act((s) => buyUpgradeBulk(s, id, buyAmount))}
+          />
           {__DEV__ && (
             <DevPanel
               onSetLevel={(level) => gameRef.current && apply(devSetLevel(gameRef.current, level))}
