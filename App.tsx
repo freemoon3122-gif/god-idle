@@ -16,6 +16,8 @@ import {
   castSkill,
   challengeBoss,
   chooseGod,
+  devAddGold,
+  devSetLevel,
   needsGodChoice,
   newGame,
   offlineReward,
@@ -25,6 +27,7 @@ import {
 } from './src/game/engine';
 import { loadGame, saveGame } from './src/storage/save';
 import { BattleView, Fx, FX_LIFETIME } from './src/ui/BattleView';
+import { DevPanel } from './src/ui/DevPanel';
 import { EvolveModal, GodChoiceModal, OfflineModal } from './src/ui/Modals';
 import { SkillBar, StatusBar as GameStatusBar, UpgradeList } from './src/ui/Panels';
 import { colors } from './src/ui/theme';
@@ -136,6 +139,13 @@ export default function App() {
           />
           <SkillBar state={game} onCast={(id: SkillId) => gameRef.current && apply(castSkill(gameRef.current, id))} />
           <UpgradeList state={game} onBuy={(id: UpgradeId) => act((s) => buyUpgrade(s, id))} />
+          {__DEV__ && (
+            <DevPanel
+              onSetLevel={(level) => gameRef.current && apply(devSetLevel(gameRef.current, level))}
+              onAddGold={() => act((s) => devAddGold(s, Math.max(1000, s.gold * 1000)))}
+              onReset={() => act(() => newGame(Date.now()))}
+            />
+          )}
         </ScrollView>
 
         <OfflineModal reward={offline} onClose={() => setOffline(null)} />

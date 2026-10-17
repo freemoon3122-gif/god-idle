@@ -153,6 +153,22 @@ export function chooseGod(state: GameState, god: GodId): GameState {
   return { ...state, god };
 }
 
+// ───────────── 개발용 치트 (DevPanel에서만 사용) ─────────────
+
+/** 레벨을 바로 바꾼다. 성장 단계가 바뀌면 evolvedTo로 알려서 진화 팝업이 뜨게 한다. */
+export function devSetLevel(state: GameState, level: number): ActionResult {
+  const result = emptyResult(state);
+  const before = formOf(state.level);
+  const after = formOf(level);
+  if (after !== before) result.evolvedTo = after;
+  result.state = { ...state, level, xp: 0, god: level < GOD_LEVEL ? null : state.god };
+  return result;
+}
+
+export function devAddGold(state: GameState, amount: number): GameState {
+  return { ...state, gold: state.gold + amount };
+}
+
 export function canBuy(state: GameState, id: UpgradeId): boolean {
   const level = state.levels[id];
   return level < findUpgrade(id).maxLevel && state.gold >= upgradeCost(id, level);
