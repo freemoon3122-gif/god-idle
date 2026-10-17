@@ -1,0 +1,15 @@
+export const colors = {
+  background: '#141026',
+  panel: '#211A3D',
+  panelLight: '#2E2554',
+  border: '#3D3270',
+  text: '#F4F1FF',
+  subText: '#A79FCC',
+  gold: '#FFD54A',
+  xp: '#6FE3FF',
+  hp: '#E5484D',
+  boss: '#FF8A3D',
+  primary: '#8B6BFF',
+  disabled: '#4A436B',
+  ground: '#2A2148',
+};

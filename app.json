@@ -1,0 +1,33 @@
+{
+  "expo": {
+    "name": "신 키우기",
+    "slug": "god-idle",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#1B1630",
+    "ios": {
+      "bundleIdentifier": "com.freemoon3122.godidle",
+      "buildNumber": "1",
+      "supportsTablet": false,
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "package": "com.freemoon3122.godidle",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "backgroundColor": "#1B1630",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    }
+  }
+}
