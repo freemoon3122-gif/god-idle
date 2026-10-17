@@ -1,9 +1,10 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { FORM_INFO, formOf, GOD_LEVEL, GODS, SKILLS, UPGRADES, upgradeCost, xpToNext } from '../game/balance';
-import { bulkPlan, canCast, formName } from '../game/engine';
+import { formOf, GOD_LEVEL, GODS, SKILLS, TEEN_LEVEL, ULTIMATE_LEVEL, UPGRADES, upgradeCost, xpToNext } from '../game/balance';
+import { availableSkills, bulkPlan, canCast, canEnhance, canFuse, formName, ownedPower } from '../game/engine';
 import { formatNumber } from '../game/format';
 import { GameState, SkillId, UpgradeId } from '../game/types';
+import { FUSE_COST, RARITY_INFO, WEAPON_LIST, WeaponId, WEAPONS } from '../game/weapons';
 import { colors } from './theme';
 
 /** 상단: 레벨, 경험치, 골드 */
@@ -27,47 +28,150 @@ export function StatusBar({ state }: { state: GameState }) {
   );
 }
 
-/** 스킬 버튼. 신이 되기 전에는 잠겨 있다. */
+/** 스킬 버튼. 아기 신은 스킬이 없고, 청소년은 삼연참, 신은 2개 (+ Lv.1000 궁극기) */
 export function SkillBar({ state, onCast }: { state: GameState; onCast: (id: SkillId) => void }) {
-  if (!state.god) {
-    const form = formOf(state.level);
-    return (
-      <View style={styles.lockedSkills}>
-        <Text style={styles.lockedText}>
-          🔒 Lv.{GOD_LEVEL}에 신이 되면 스킬이 열려요 · 지금은 {FORM_INFO[form].name} (공격력 ×{FORM_INFO[form].multiplier})
-        </Text>
-      </View>
-    );
-  }
+  const skills = availableSkills(state);
+  const form = formOf(state.level);
+  // 다음에 열릴 스킬 안내
+  const nextHint =
+    form === 'baby'
+      ? `🔒 Lv.${TEEN_LEVEL} 청소년 신이 되면 「삼연참」이 열려요`
+      : form === 'teen'
+        ? `🔒 Lv.${GOD_LEVEL}에 신이 되면 신의 스킬 2개가 열려요`
+        : state.god && state.level < ULTIMATE_LEVEL
+          ? `🔒 Lv.${ULTIMATE_LEVEL}에 궁극기 「${SKILLS[GODS[state.god].ultimate].name}」이 열려요`
+          : null;
+
   return (
-    <View style={styles.skills}>
-      {GODS[state.god].skills.map((id) => {
-        const skill = SKILLS[id];
-        const cd = state.skillCooldowns[id] ?? 0;
-        const ready = canCast(state, id);
-        return (
-          <Pressable
-            key={id}
-            onPress={() => onCast(id)}
-            disabled={!ready}
-            accessibilityRole="button"
-            style={({ pressed }) => [styles.skill, !ready && styles.skillCooling, pressed && { opacity: 0.7 }]}
-          >
-            <Text style={styles.skillEmoji}>{skill.emoji}</Text>
+    <View style={styles.skillArea}>
+      {skills.length > 0 && (
+        <View style={styles.skills}>
+          {skills.map((id) => {
+            const skill = SKILLS[id];
+            const cd = state.skillCooldowns[id] ?? 0;
+            const ready = canCast(state, id);
+            const isUlt = state.god !== null && GODS[state.god].ultimate === id;
+            return (
+              <Pressable
+                key={id}
+                onPress={() => onCast(id)}
+                disabled={!ready}
+                accessibilityRole="button"
+                style={({ pressed }) => [
+                  styles.skill,
+                  isUlt && styles.skillUlt,
+                  !ready && styles.skillCooling,
+                  pressed && { opacity: 0.7, transform: [{ scale: 0.96 }] },
+                ]}
+              >
+                {/* 쿨타임 진행 막대 */}
+                {!ready && <View style={[styles.cooldownFill, { width: `${(1 - cd / skill.cooldown) * 100}%` }]} />}
+                <Text style={styles.skillEmoji}>{skill.emoji}</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.skillName}>{skill.name}</Text>
+                  <Text style={styles.skillDesc} numberOfLines={2}>
+                    {ready ? skill.description : `${Math.ceil(cd / 1000)}초`}
+                  </Text>
+                </View>
+              </Pressable>
+            );
+          })}
+        </View>
+      )}
+      {nextHint && (
+        <View style={styles.lockedSkills}>
+          <Text style={styles.lockedText}>{nextHint}</Text>
+        </View>
+      )}
+    </View>
+  );
+}
+
+/** 무기 창: 장착 무기 + 가진 무기 목록. 같은 무기 3개면 등급업, 초월 무기는 초월 무기를 재료로 강화 */
+export function WeaponPanel({
+  state,
+  onEquip,
+  onFuse,
+  onEnhance,
+}: {
+  state: GameState;
+  onEquip: (id: WeaponId) => void;
+  onFuse: (id: WeaponId) => void;
+  onEnhance: (target: WeaponId, material: WeaponId) => void;
+}) {
+  const owned = WEAPON_LIST.filter((w) => (state.weapons[w.id] ?? 0) > 0).reverse(); // 높은 등급이 위로
+  const equipped = state.equippedWeapon ? WEAPONS[state.equippedWeapon] : null;
+
+  return (
+    <View style={styles.weapons}>
+      <Text style={styles.sectionTitle}>무기</Text>
+      <View style={styles.equipped}>
+        {equipped ? (
+          <>
+            <Text style={styles.weaponEmojiBig}>{equipped.emoji}</Text>
             <View style={{ flex: 1 }}>
-              <Text style={styles.skillName}>{skill.name}</Text>
-              <Text style={styles.skillDesc} numberOfLines={2}>
-                {ready ? skill.description : `${Math.ceil(cd / 1000)}초 후 사용 가능`}
+              <Text style={[styles.rarity, { color: RARITY_INFO[equipped.rarity].color }]}>{RARITY_INFO[equipped.rarity].name}</Text>
+              <Text style={styles.weaponName}>
+                {equipped.name}
+                {(state.weaponEnhance[equipped.id] ?? 0) > 0 ? ` +${state.weaponEnhance[equipped.id]}` : ''}
+              </Text>
+              <Text style={styles.weaponDesc}>공격력 ×{ownedPower(state, equipped.id).toFixed(2)}</Text>
+            </View>
+          </>
+        ) : (
+          <Text style={styles.weaponDesc}>아직 무기가 없어요. 몬스터를 잡으면 가끔 떨어져요! (보스는 확률 ↑)</Text>
+        )}
+      </View>
+
+      {owned.map((w) => {
+        const count = state.weapons[w.id] ?? 0;
+        const rarity = RARITY_INFO[w.rarity];
+        const isEquipped = state.equippedWeapon === w.id;
+        const enhance = state.weaponEnhance[w.id] ?? 0;
+        // 초월 무기 강화 재료: 다른 초월 무기를 먼저, 없으면 같은 무기
+        const material = WEAPON_LIST.filter((m) => m.rarity === 'transcendent')
+          .map((m) => m.id)
+          .sort((a) => (a === w.id ? 1 : -1))
+          .find((m) => canEnhance(state, w.id, m));
+        return (
+          <View key={w.id} style={[styles.weaponRow, { borderLeftColor: rarity.color }]}>
+            <Text style={styles.weaponEmoji}>{w.emoji}</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.weaponRowName}>
+                <Text style={{ color: rarity.color }}>[{rarity.name}]</Text> {w.name}
+                {enhance > 0 ? ` +${enhance}` : ''} <Text style={styles.count}>×{count}</Text>
+              </Text>
+              <Text style={styles.weaponDesc}>
+                공격력 ×{ownedPower(state, w.id).toFixed(2)}
+                {w.rarity !== 'transcendent' ? ` · ${FUSE_COST}개면 등급업` : ' · 초월 무기 1개로 강화'}
               </Text>
             </View>
-          </Pressable>
+            {w.rarity === 'transcendent' ? (
+              <SmallButton label="강화" enabled={!!material} onPress={() => material && onEnhance(w.id, material)} color={rarity.color} />
+            ) : (
+              <SmallButton label="등급업" enabled={canFuse(state, w.id)} onPress={() => onFuse(w.id)} color={rarity.color} />
+            )}
+            <SmallButton label={isEquipped ? '장착중' : '장착'} enabled={!isEquipped} onPress={() => onEquip(w.id)} color={colors.primary} />
+          </View>
         );
       })}
     </View>
   );
 }
 
-/** 골드 강화 목록 */
+function SmallButton({ label, enabled, onPress, color }: { label: string; enabled: boolean; onPress: () => void; color: string }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={!enabled}
+      accessibilityRole="button"
+      style={({ pressed }) => [styles.smallButton, { backgroundColor: enabled ? color : colors.disabled }, pressed && { opacity: 0.7 }]}
+    >
+      <Text style={[styles.smallButtonText, enabled && color !== colors.primary && { color: colors.background }]}>{label}</Text>
+    </Pressable>
+  );
+}
+
 export const BUY_AMOUNTS = [1, 10, 50, 100];
 
 interface UpgradeListProps {
@@ -139,11 +243,14 @@ const styles = StyleSheet.create({
   xpFill: { height: '100%', borderRadius: 4, backgroundColor: colors.xp },
   xpText: { color: colors.subText, fontSize: 11, marginTop: 3 },
 
-  lockedSkills: { backgroundColor: colors.panel, borderRadius: 14, padding: 14, marginTop: 12 },
+  skillArea: { marginTop: 12, gap: 10 },
+  lockedSkills: { backgroundColor: colors.panel, borderRadius: 14, padding: 12 },
   lockedText: { color: colors.subText, fontSize: 13, textAlign: 'center', lineHeight: 19 },
-  skills: { flexDirection: 'row', gap: 10, marginTop: 12 },
+  skills: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   skill: {
-    flex: 1,
+    flexGrow: 1,
+    flexBasis: '45%',
+    overflow: 'hidden',
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
@@ -151,11 +258,26 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     padding: 10,
   },
+  skillUlt: { flexBasis: '100%', backgroundColor: '#C2410C' },
   skillCooling: { backgroundColor: colors.disabled },
+  cooldownFill: { position: 'absolute', left: 0, top: 0, bottom: 0, backgroundColor: 'rgba(255,255,255,0.12)' },
   skillEmoji: { fontSize: 28 },
   skillName: { color: '#fff', fontWeight: '800', fontSize: 14 },
   skillDesc: { color: 'rgba(255,255,255,0.8)', fontSize: 11, marginTop: 2 },
 
+  weapons: { backgroundColor: colors.panel, borderRadius: 14, padding: 12, marginTop: 12, gap: 8 },
+  sectionTitle: { color: colors.text, fontWeight: '800', fontSize: 15 },
+  equipped: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: colors.panelLight, borderRadius: 12, padding: 12 },
+  weaponEmojiBig: { fontSize: 36 },
+  rarity: { fontSize: 12, fontWeight: '900' },
+  weaponName: { color: colors.text, fontSize: 16, fontWeight: '800' },
+  weaponDesc: { color: colors.subText, fontSize: 12, marginTop: 2 },
+  weaponRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6, paddingLeft: 8, borderLeftWidth: 3 },
+  weaponEmoji: { fontSize: 22 },
+  weaponRowName: { color: colors.text, fontSize: 13, fontWeight: '700' },
+  count: { color: colors.subText, fontWeight: '600' },
+  smallButton: { borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7 },
+  smallButtonText: { color: '#fff', fontSize: 12, fontWeight: '800' },
   upgrades: { backgroundColor: colors.panel, borderRadius: 14, padding: 6, marginTop: 12 },
   amountRow: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingTop: 8, paddingBottom: 4 },
   amountLabel: { color: colors.text, fontWeight: '800', fontSize: 15, marginRight: 'auto' },

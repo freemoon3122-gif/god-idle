@@ -21,6 +21,7 @@ export const OFFLINE_XP_EFFICIENCY = 0.1;
 
 export const TEEN_LEVEL = 100;
 export const GOD_LEVEL = 200;
+export const ULTIMATE_LEVEL = 1000;
 
 export function formOf(level: number): Form {
   if (level >= GOD_LEVEL) return 'god';
@@ -40,7 +41,7 @@ export function xpToNext(level: number): number {
 }
 
 export function xpForKill(wave: number): number {
-  const base = 6 + wave * 3.6;
+  const base = (6 + wave * 3.6) * Math.pow(1.01, Math.max(0, wave - 300));
   return Math.ceil(isBossWave(wave) ? base * 5 : base);
 }
 
@@ -62,8 +63,19 @@ export function stageLabel(wave: number): string {
   return `${stage}-${step}`;
 }
 
+/**
+ * 웨이브 300까지는 ×1.19씩, 그 뒤로는 ×1.18씩 늘어난다.
+ * 골드로 올릴 수 있는 공격력은 웨이브당 약 ×1.158씩 늘기 때문에, 후반에도 1.19를 쓰면 넘을 수 없는 벽이 생긴다.
+ * 반대로 1.158보다 작게 하면 플레이어가 기하급수적으로 폭주한다. 그 사이의 완만한 오르막으로 맞춘다.
+ */
+export const HP_GROWTH_EARLY = 1.19;
+export const HP_GROWTH_LATE = 1.18;
+export const HP_GROWTH_SWITCH_WAVE = 300;
+
 export function monsterHp(wave: number): number {
-  const base = 10 * Math.pow(1.19, wave - 1);
+  const early = Math.min(wave, HP_GROWTH_SWITCH_WAVE) - 1;
+  const late = Math.max(0, wave - HP_GROWTH_SWITCH_WAVE);
+  const base = 10 * Math.pow(HP_GROWTH_EARLY, early) * Math.pow(HP_GROWTH_LATE, late);
   return Math.ceil(isBossWave(wave) ? base * 6 : base);
 }
 
@@ -95,6 +107,7 @@ export interface GodInfo {
   emoji: string;
   passive: string;
   skills: SkillId[];
+  ultimate: SkillId; // Lv.1000에 열리는 궁극기
 }
 
 export const GODS: Record<GodId, GodInfo> = {
@@ -105,14 +118,16 @@ export const GODS: Record<GodId, GodInfo> = {
     emoji: '⚡',
     passive: '공격 속도 +30%',
     skills: ['zeus_bolt', 'zeus_storm'],
+    ultimate: 'zeus_judgment',
   },
   poseidon: {
     id: 'poseidon',
     name: '포세이돈',
     title: '바다와 지진의 신',
     emoji: '🔱',
-    passive: '치명타 확률 +15%',
+    passive: '치명타 확률 +15%, 치명타 피해 4배',
     skills: ['poseidon_wave', 'poseidon_trident'],
+    ultimate: 'poseidon_kraken',
   },
 };
 
@@ -122,13 +137,27 @@ export interface SkillInfo {
   emoji: string;
   description: string;
   cooldown: number; // ms
-  /** 즉발 피해: 일반 공격의 몇 배 */
+  /** 타격 한 번의 피해: 일반 공격의 몇 배 */
   damageMultiplier?: number;
+  /** 연타 횟수 (없으면 1번) */
+  hits?: number;
+  /** 연타 사이 간격 (ms) */
+  hitInterval?: number;
   /** 지속 효과 시간 (ms) */
   buffDuration?: number;
 }
 
 export const SKILLS: Record<SkillId, SkillInfo> = {
+  teen_slash: {
+    id: 'teen_slash',
+    name: '삼연참',
+    emoji: '🗡️',
+    description: '검으로 세 번 찔러 매번 공격력의 6배 피해',
+    cooldown: 6_000,
+    damageMultiplier: 6,
+    hits: 3,
+    hitInterval: 160,
+  },
   zeus_bolt: {
     id: 'zeus_bolt',
     name: '낙뢰',
@@ -144,6 +173,16 @@ export const SKILLS: Record<SkillId, SkillInfo> = {
     description: '10초 동안 공격 속도 3배',
     cooldown: 40_000,
     buffDuration: 10_000,
+  },
+  zeus_judgment: {
+    id: 'zeus_judgment',
+    name: '올림포스의 심판',
+    emoji: '🌩️',
+    description: '하늘에서 번개 8줄기가 쏟아져 각각 공격력의 15배 피해',
+    cooldown: 60_000,
+    damageMultiplier: 15,
+    hits: 8,
+    hitInterval: 110,
   },
   poseidon_wave: {
     id: 'poseidon_wave',
@@ -161,7 +200,19 @@ export const SKILLS: Record<SkillId, SkillInfo> = {
     cooldown: 40_000,
     buffDuration: 10_000,
   },
+  poseidon_kraken: {
+    id: 'poseidon_kraken',
+    name: '크라켄 강림',
+    emoji: '🐙',
+    description: '거대한 촉수가 6번 내리쳐 각각 공격력의 20배 피해 + 보스 시간 10초 증가',
+    cooldown: 60_000,
+    damageMultiplier: 20,
+    hits: 6,
+    hitInterval: 170,
+  },
 };
+
+export const KRAKEN_BOSS_TIME_BONUS = 10_000;
 
 export const WAVE_BOSS_TIME_BONUS = 5_000;
 

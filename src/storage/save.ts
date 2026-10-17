@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import { SAVE_VERSION } from '../game/engine';
+import { migrate, SAVE_VERSION } from '../game/engine';
 import { GameState } from '../game/types';
 
 const SAVE_KEY = 'god-idle/save';
@@ -19,7 +19,7 @@ export async function loadGame(): Promise<GameState | null> {
     const json = await AsyncStorage.getItem(SAVE_KEY);
     if (!json) return null;
     const state = JSON.parse(json) as GameState;
-    return state.version === SAVE_VERSION ? state : null;
+    return state.version === SAVE_VERSION ? migrate(state) : null;
   } catch (e) {
     console.warn('불러오기 실패', e);
     return null;

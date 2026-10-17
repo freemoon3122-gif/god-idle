@@ -17,7 +17,11 @@ import {
   challengeBoss,
   chooseGod,
   devAddGold,
+  devGiveWeapon,
   devSetLevel,
+  enhanceWeapon,
+  equipWeapon,
+  fuseWeapon,
   needsGodChoice,
   newGame,
   offlineReward,
@@ -26,13 +30,14 @@ import {
   tick,
 } from './src/game/engine';
 import { loadGame, saveGame } from './src/storage/save';
-import { BattleView, Fx, FX_LIFETIME } from './src/ui/BattleView';
+import { BattleHandle, BattleView } from './src/ui/BattleView';
 import { DevPanel } from './src/ui/DevPanel';
 import { EvolveModal, GodChoiceModal, OfflineModal } from './src/ui/Modals';
-import { SkillBar, StatusBar as GameStatusBar, UpgradeList } from './src/ui/Panels';
+import { SkillBar, StatusBar as GameStatusBar, UpgradeList, WeaponPanel } from './src/ui/Panels';
 import { colors } from './src/ui/theme';
+import { WeaponId } from './src/game/weapons';
 
-const TICK_MS = 100; // 0.1초마다 게임을 진행
+const TICK_MS = 50; // 0.05초마다 게임을 진행 (연타 스킬 간격을 정확히 맞추기 위해)
 const SAVE_EVERY_MS = 5_000;
 
 /**
@@ -45,25 +50,16 @@ const SAVE_EVERY_MS = 5_000;
 export default function App() {
   const [game, setGame] = useState<GameState | null>(null);
   const gameRef = useRef<GameState | null>(null);
-  const [fx, setFx] = useState<Fx[]>([]);
-  const fxId = useRef(0);
-  const lastAutoAt = useRef(0);
-  const lastHitAt = useRef(0);
+  const battleRef = useRef<BattleHandle>(null);
   const [offline, setOffline] = useState<OfflineReward | null>(null);
   const [evolved, setEvolved] = useState(false);
   const [buyAmount, setBuyAmount] = useState(1); // 강화 한 번에 몇 단계씩 살지 (×1/×10/×50/×100)
 
   /** 엔진이 돌려준 결과를 화면 상태에 반영한다. 모든 행동이 이 함수를 거친다. */
   const apply = useCallback((r: ActionResult) => {
-    const now = Date.now();
     gameRef.current = r.state;
     setGame(r.state);
-    if (r.hits.length > 0) {
-      lastHitAt.current = now;
-      if (r.hits.some((h) => h.source === 'auto')) lastAutoAt.current = now;
-      const added = r.hits.slice(-4).map((hit) => ({ id: fxId.current++, hit, born: now }));
-      setFx((old) => [...old.filter((f) => now - f.born < FX_LIFETIME), ...added].slice(-14));
-    }
+    battleRef.current?.play(r); // 타격·스킬·무기 획득 연출
     if (r.evolvedTo === 'teen') setEvolved(true);
   }, []);
 
@@ -119,9 +115,16 @@ export default function App() {
     );
   }
 
-  const act = (fn: (s: GameState) => GameState) => {
+  /** 연출이 필요 없는 단순한 상태 변경 (강화 구매, 장착 등) */
+  const act = (fn: (s: GameState) => GameState, drops: WeaponId[] = []) => {
     if (!gameRef.current) return;
-    apply({ state: fn(gameRef.current), hits: [], killed: false, bossFailed: false, levelUps: 0, evolvedTo: null });
+    apply({ state: fn(gameRef.current), hits: [], casts: [], drops, killed: false, bossFailed: false, levelUps: 0, evolvedTo: null });
+  };
+
+  const fuse = (id: WeaponId) => {
+    if (!gameRef.current) return;
+    const { state, result } = fuseWeapon(gameRef.current, id);
+    act(() => state, result ? [result] : []);
   };
 
   return (
@@ -130,11 +133,8 @@ export default function App() {
         <ScrollView contentContainerStyle={styles.content}>
           <GameStatusBar state={game} />
           <BattleView
+            ref={battleRef}
             state={game}
-            fx={fx}
-            now={Date.now()}
-            lastAutoAt={lastAutoAt.current}
-            lastHitAt={lastHitAt.current}
             onTap={() => gameRef.current && apply(tap(gameRef.current))}
             onChallengeBoss={() => act(challengeBoss)}
           />
@@ -145,11 +145,18 @@ export default function App() {
             onChangeAmount={setBuyAmount}
             onBuy={(id: UpgradeId) => act((s) => buyUpgradeBulk(s, id, buyAmount))}
           />
+          <WeaponPanel
+            state={game}
+            onEquip={(id) => act((s) => equipWeapon(s, id))}
+            onFuse={fuse}
+            onEnhance={(target, material) => act((s) => enhanceWeapon(s, target, material))}
+          />
           {__DEV__ && (
             <DevPanel
               onSetLevel={(level) => gameRef.current && apply(devSetLevel(gameRef.current, level))}
               onAddGold={() => act((s) => devAddGold(s, Math.max(1000, s.gold * 1000)))}
               onReset={() => act(() => newGame(Date.now()))}
+              onGiveWeapon={(id) => gameRef.current && apply(devGiveWeapon(gameRef.current, id))}
             />
           )}
         </ScrollView>
