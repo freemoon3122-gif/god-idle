@@ -210,9 +210,29 @@ export const SKILLS: Record<SkillId, SkillInfo> = {
     hits: 6,
     hitInterval: 170,
   },
+  // ───── 레이드 「기간토마키아」 첫 클리어 보상 ─────
+  zeus_gigas: {
+    id: 'zeus_gigas',
+    name: '거인 사냥',
+    emoji: '🏹',
+    description: '번개와 헤라클레스의 화살이 번갈아 8번, 각각 공격력의 9배',
+    cooldown: 45_000,
+    damageMultiplier: 9,
+    hits: 8,
+    hitInterval: 120,
+  },
+  poseidon_nisyros: {
+    id: 'poseidon_nisyros',
+    name: '니시로스 투척',
+    emoji: '🏝️',
+    description: '코스 섬을 뜯어 내던진다. 공격력의 70배',
+    cooldown: 45_000,
+    damageMultiplier: 70,
+  },
 };
 
 export const KRAKEN_BOSS_TIME_BONUS = 10_000;
+
 
 export const WAVE_BOSS_TIME_BONUS = 5_000;
 

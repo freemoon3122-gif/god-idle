@@ -24,7 +24,8 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
-    "simulate": "tsx scripts/simulate.ts"
+    "simulate": "tsx scripts/simulate.ts",
+    "raid-sim": "tsx scripts/raid-sim.ts"
   },
   "private": true
 }

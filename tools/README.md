@@ -6,6 +6,7 @@
 cd tools
 python3 build.py      # 신 캐릭터 → heroes.json
 python3 monsters.py   # 몬스터 → monsters.json
+python3 raids.py      # 레이드 보스·헤라클레스·가이아·헤르메스 → raids.json
 python3 preview.py heroes.json heroes.png      # 외곽선까지 붙여서 미리보기 이미지로 저장
 ```
 

@@ -25,8 +25,30 @@ import {
   xpForKill,
   xpToNext,
 } from './balance';
-import { ActionResult, Form, GameState, GodId, Hit, Monster, QueuedHit, SkillId, UpgradeId } from './types';
-import { FUSE_COST, nextRarity, randomWeaponOf, rollWeaponDrop, WEAPON_LIST, WeaponId, weaponPower, WEAPONS } from './weapons';
+import {
+  BREATH_INTERVAL,
+  BREATH_INTERVAL_ENRAGED,
+  dayKey,
+  ENRAGE_HP_RATIO,
+  GIGANTO_UNLOCK_LEVEL,
+  gigantoRewardSkill,
+  HERACLES_DAMAGE,
+  HERACLES_INTERVAL,
+  IMMORTAL_MULTIPLIER,
+  MARK_DURATION,
+  MARK_MULTIPLIER,
+  raidPhases,
+  RAIDS,
+  RESTORED_DURATION,
+  RESTORED_MULTIPLIER,
+  STUN_DURATION,
+  TENDON_DURATION,
+  TENDON_HP_RATIO,
+  TENDON_MULTIPLIER,
+  TYPHON_UNLOCK_LEVEL,
+} from './raids';
+import { ActionResult, Form, GameState, GodId, Hit, Monster, QueuedHit, RaidId, RaidResult, RaidState, SkillId, UpgradeId } from './types';
+import { FUSE_COST, nextRarity, randomWeaponOf, Rarity, rollWeaponDrop, WEAPON_LIST, WeaponId, weaponPower, WEAPONS } from './weapons';
 
 export type Rng = () => number;
 
@@ -60,6 +82,11 @@ export function newGame(now: number): GameState {
     weapons: {},
     weaponEnhance: {},
     equippedWeapon: null,
+    raid: null,
+    raidTickets: { day: dayKey(now), used: {} },
+    raidClears: {},
+    raidResult: null,
+    unlockedSkills: [],
     totalKills: 0,
     savedAt: now,
   };
@@ -76,7 +103,18 @@ export function migrate(saved: GameState): GameState {
     weapons: saved.weapons ?? {},
     weaponEnhance: saved.weaponEnhance ?? {},
     equippedWeapon: saved.equippedWeapon ?? null,
+    // 레이드 도중 앱을 껐다면 그 레이드는 무효로 하고 입장권을 돌려준다
+    raid: null,
+    raidTickets: refundTicket(saved.raidTickets ?? { day: '', used: {} }, saved.raid?.id),
+    raidClears: saved.raidClears ?? {},
+    raidResult: null,
+    unlockedSkills: saved.unlockedSkills ?? [],
   };
+}
+
+function refundTicket(t: GameState['raidTickets'], id: RaidId | undefined): GameState['raidTickets'] {
+  if (!id) return t;
+  return { ...t, used: { ...t.used, [id]: Math.max(0, (t.used[id] ?? 0) - 1) } };
 }
 
 // ───────────── 현재 전투 능력치 (레벨·단계·신·버프를 모두 반영) ─────────────
@@ -101,7 +139,9 @@ export function ownedPower(s: GameState, id: WeaponId): number {
 export function availableSkills(s: GameState): SkillId[] {
   if (s.god) {
     const god = GODS[s.god];
-    return s.level >= ULTIMATE_LEVEL ? [...god.skills, god.ultimate] : god.skills;
+    const base = s.level >= ULTIMATE_LEVEL ? [...god.skills, god.ultimate] : [...god.skills];
+    const reward = gigantoRewardSkill(s.god);
+    return reward && s.unlockedSkills.includes(reward) ? [...base, reward] : base;
   }
   return formOf(s.level) === 'teen' ? ['teen_slash'] : [];
 }
@@ -146,6 +186,15 @@ export function tick(state: GameState, dt: number, rng: Rng = Math.random): Acti
 
   const result = emptyResult(s);
 
+  // 0) 레이드 중이면 레이드 시계·기믹을 먼저 돌린다 (헤라클레스의 화살, 브레스, 힘줄 절단...)
+  if (s.raid) {
+    s = raidTick(s, dt, result, rng);
+    if (!s.raid) {
+      result.state = s;
+      return result; // 시간 초과로 레이드가 끝났다
+    }
+  }
+
   // 1) 연타 스킬의 예약된 타격: 시간이 된 것부터 차례로 들어간다
   if (s.queuedHits.length > 0) {
     const queue = s.queuedHits.map((q) => ({ ...q, dueIn: q.dueIn - dt }));
@@ -157,11 +206,12 @@ export function tick(state: GameState, dt: number, rng: Rng = Math.random): Acti
   s.attackCooldown -= dt;
   while (s.attackCooldown <= 0) {
     s.attackCooldown += 1000 / attacksPerSecond(s);
+    if (s.raid && s.raid.stunLeft > 0) continue; // 브레스에 맞아 기절: 자동 공격을 못 한다
     s = hitMonster(s, normalHit(s, 'auto', rng), result, rng);
   }
 
-  // 3) 보스 제한 시간
-  if (s.bossTimeLeft !== null && !result.killed) {
+  // 3) 보스 제한 시간 (레이드 중에는 메인 전투가 멈춰 있다)
+  if (!s.raid && s.bossTimeLeft !== null && !result.killed) {
     s.bossTimeLeft -= dt;
     if (s.bossTimeLeft <= 0) {
       s = { ...enterWave(s, s.wave - 1), farming: true }; // 한 웨이브 뒤로 가서 골드를 모은다
@@ -193,10 +243,9 @@ export function castSkill(state: GameState, id: SkillId, rng: Rng = Math.random)
   result.casts.push(id);
 
   if (skill.buffDuration) s.buff = { skill: id, timeLeft: skill.buffDuration };
-  if (s.bossTimeLeft !== null) {
-    if (id === 'poseidon_wave') s.bossTimeLeft += WAVE_BOSS_TIME_BONUS;
-    if (id === 'poseidon_kraken') s.bossTimeLeft += KRAKEN_BOSS_TIME_BONUS;
-  }
+  const timeBonus = id === 'poseidon_wave' ? WAVE_BOSS_TIME_BONUS : id === 'poseidon_kraken' ? KRAKEN_BOSS_TIME_BONUS : 0;
+  if (timeBonus && s.raid) s.raid = { ...s.raid, timeLeft: s.raid.timeLeft + timeBonus };
+  else if (timeBonus && s.bossTimeLeft !== null) s.bossTimeLeft += timeBonus;
   if (skill.damageMultiplier) {
     // 첫 타는 바로, 나머지는 hitInterval 간격으로 예약 → tick()에서 차례로 들어간다
     const total = skill.hits ?? 1;
@@ -380,7 +429,7 @@ export function applyOfflineReward(state: GameState, reward: OfflineReward): Act
 // ───────────── 내부 함수 ─────────────
 
 function emptyResult(state: GameState): ActionResult {
-  return { state, hits: [], casts: [], drops: [], killed: false, bossFailed: false, levelUps: 0, evolvedTo: null };
+  return { state, hits: [], casts: [], drops: [], raidEvents: [], killed: false, bossFailed: false, levelUps: 0, evolvedTo: null };
 }
 
 export function spawnMonster(wave: number): Monster {
@@ -402,6 +451,7 @@ function skillHit(s: GameState, q: QueuedHit, rng: Rng): Hit {
 
 /** 몬스터에게 피해를 주고, 쓰러뜨리면 보상을 받고 다음 몬스터로 넘어간다. result에 기록을 남긴다. */
 function hitMonster(state: GameState, hit: Hit, result: ActionResult, rng: Rng): GameState {
+  if (state.raid) return hitRaid(state, hit, result, rng);
   result.hits.push(hit);
   const hp = state.monster.hp - hit.damage;
   if (hp > 0) return { ...state, monster: { ...state.monster, hp } };
@@ -452,4 +502,216 @@ function decreaseCooldowns(cds: GameState['skillCooldowns'], dt: number): GameSt
     if (ms > dt) next[id] = ms - dt;
   }
   return next;
+}
+
+// ───────────── 레이드 ─────────────
+
+export function raidUnlocked(s: GameState, id: RaidId): boolean {
+  if (!s.god) return false;
+  if (id === 'gigantomachy') return s.level >= GIGANTO_UNLOCK_LEVEL;
+  return s.level >= TYPHON_UNLOCK_LEVEL && (s.raidClears.gigantomachy ?? 0) > 0;
+}
+
+export function ticketsLeft(s: GameState, id: RaidId, now: number): number {
+  const used = s.raidTickets.day === dayKey(now) ? (s.raidTickets.used[id] ?? 0) : 0;
+  return Math.max(0, RAIDS[id].ticketsPerDay - used);
+}
+
+export function canEnterRaid(s: GameState, id: RaidId, now: number): boolean {
+  return !s.raid && raidUnlocked(s, id) && ticketsLeft(s, id, now) > 0;
+}
+
+/**
+ * 레이드 입장. 보스 체력은 "입장할 때의 전투력 × 정해진 초"로 정한다.
+ * → 언제 도전해도 비슷한 긴장감이 있고, 강해질수록 보상(최고 웨이브 기준)이 커진다.
+ */
+export function startRaid(state: GameState, id: RaidId, now: number): ActionResult {
+  const result = emptyResult(state);
+  if (!canEnterRaid(state, id, now)) return result;
+
+  const today = dayKey(now);
+  const used = state.raidTickets.day === today ? state.raidTickets.used : {};
+  const baseDps = averageDps(state);
+  const phases = raidPhases(id, state.god);
+  const raid: RaidState = {
+    id,
+    phase: 0,
+    monster: raidMonster(id, 0, state.god, baseDps),
+    timeLeft: RAIDS[id].timeLimit,
+    baseDps,
+    totalHp: phases.reduce((sum, p) => sum + baseDps * p.hpSeconds, 0),
+    totalDamage: 0,
+    heraclesCooldown: HERACLES_INTERVAL,
+    markLeft: 0,
+    tendonLeft: 0,
+    tendonDone: false,
+    restoredLeft: 0,
+    breathCooldown: BREATH_INTERVAL,
+    stunLeft: 0,
+    enraged: false,
+  };
+  result.state = {
+    ...state,
+    raid,
+    queuedHits: [], // 메인 전투에서 예약된 연타는 버린다
+    raidResult: null,
+    raidTickets: { day: today, used: { ...used, [id]: (used[id] ?? 0) + 1 } },
+  };
+  result.raidEvents.push('intro');
+  return result;
+}
+
+/** 포기: 넣은 피해만큼만 보상을 받고 나온다 */
+export function leaveRaid(state: GameState, rng: Rng = Math.random): ActionResult {
+  const result = emptyResult(state);
+  if (!state.raid) return result;
+  result.state = finishRaid(state, false, result, rng);
+  return result;
+}
+
+export function dismissRaidResult(state: GameState): GameState {
+  return { ...state, raidResult: null };
+}
+
+/** 지금 레이드에서 들어가는 피해 배율 (기믹 반영) */
+export function raidDamageMultiplier(r: RaidState): number {
+  if (r.id === 'gigantomachy') return r.markLeft > 0 ? MARK_MULTIPLIER : IMMORTAL_MULTIPLIER;
+  if (r.tendonLeft > 0) return TENDON_MULTIPLIER;
+  if (r.restoredLeft > 0) return RESTORED_MULTIPLIER;
+  return 1;
+}
+
+function raidMonster(id: RaidId, phase: number, god: GodId | null, baseDps: number): Monster {
+  const p = raidPhases(id, god)[phase];
+  const hp = Math.ceil(baseDps * p.hpSeconds);
+  return { kind: p.kind, name: p.name, hp, maxHp: hp, isBoss: p.isBoss };
+}
+
+function raidTick(state: GameState, dt: number, result: ActionResult, rng: Rng): GameState {
+  let r: RaidState = {
+    ...state.raid!,
+    timeLeft: state.raid!.timeLeft - dt,
+    markLeft: Math.max(0, state.raid!.markLeft - dt),
+    restoredLeft: Math.max(0, state.raid!.restoredLeft - dt),
+    stunLeft: Math.max(0, state.raid!.stunLeft - dt),
+  };
+  let s: GameState = { ...state, raid: r };
+
+  if (r.timeLeft <= 0) return finishRaid(s, false, result, rng);
+
+  if (r.id === 'gigantomachy') {
+    // 헤라클레스: 2초마다 화살 → 맞은 거인에게 「필멸의 표식」
+    r.heraclesCooldown -= dt;
+    if (r.heraclesCooldown <= 0) {
+      r.heraclesCooldown += HERACLES_INTERVAL;
+      r.markLeft = MARK_DURATION;
+      const hit = normalHit(s, 'heracles', rng);
+      s = hitRaid({ ...s, raid: r }, { ...hit, damage: hit.damage * HERACLES_DAMAGE }, result, rng);
+    }
+  } else {
+    // 티포에우스: 힘줄 절단이 끝나면 헤르메스와 판이 힘줄을 되찾아 온다
+    if (r.tendonLeft > 0) {
+      r.tendonLeft = Math.max(0, r.tendonLeft - dt);
+      if (r.tendonLeft === 0) {
+        r.restoredLeft = RESTORED_DURATION;
+        result.raidEvents.push('hermes');
+      }
+    }
+    // 불길 브레스: 맞으면 잠깐 기절
+    r.breathCooldown -= dt;
+    if (r.breathCooldown <= 0) {
+      r.breathCooldown += r.enraged ? BREATH_INTERVAL_ENRAGED : BREATH_INTERVAL;
+      r.stunLeft = STUN_DURATION;
+      result.raidEvents.push('breath');
+    }
+    s = { ...s, raid: r };
+  }
+  return s;
+}
+
+/** 레이드 몬스터에게 피해를 준다. 기믹 배율을 곱하고, 체력에 따라 기믹을 발동하고, 쓰러지면 다음 페이즈로 */
+function hitRaid(state: GameState, hit: Hit, result: ActionResult, rng: Rng): GameState {
+  const r0 = state.raid!;
+  const damage = hit.damage * raidDamageMultiplier(r0);
+  result.hits.push({ ...hit, damage });
+  const dealt = Math.min(damage, r0.monster.hp);
+  let r: RaidState = { ...r0, monster: { ...r0.monster, hp: r0.monster.hp - damage }, totalDamage: r0.totalDamage + dealt };
+
+  if (r.id === 'typhoeus') {
+    const ratio = r.monster.hp / r.monster.maxHp;
+    if (!r.tendonDone && ratio <= TENDON_HP_RATIO) {
+      r = { ...r, tendonDone: true, tendonLeft: TENDON_DURATION };
+      result.raidEvents.push('tendon');
+    }
+    if (!r.enraged && ratio <= ENRAGE_HP_RATIO) {
+      r = { ...r, enraged: true, breathCooldown: Math.min(r.breathCooldown, 1_500) };
+      result.raidEvents.push('enrage');
+    }
+  }
+
+  if (r.monster.hp > 0) return { ...state, raid: r };
+
+  // 쓰러뜨렸다 → 다음 적, 또는 클리어
+  result.killed = true;
+  const phases = raidPhases(r.id, state.god);
+  if (r.phase + 1 < phases.length) {
+    const phase = r.phase + 1;
+    if (phases[phase].isBoss) result.raidEvents.push('boss');
+    return { ...state, raid: { ...r, phase, monster: raidMonster(r.id, phase, state.god, r.baseDps) } };
+  }
+  return finishRaid({ ...state, raid: r }, true, result, rng);
+}
+
+/** 레이드 종료: 보상 계산. 실패해도 넣은 피해 비율만큼(절반) 보상을 받는다 */
+function finishRaid(state: GameState, cleared: boolean, result: ActionResult, rng: Rng): GameState {
+  const r = state.raid!;
+  const info = RAIDS[r.id];
+  const damagePct = Math.min(1, r.totalDamage / r.totalHp);
+  const rate = cleared ? 1 : damagePct * 0.5;
+  const wave = Math.max(1, state.maxWave);
+  const gold = Math.floor(monsterGold(wave, state.levels.gold) * info.goldReward * rate);
+  const xp = Math.floor(xpForKill(wave) * info.xpReward * rate);
+
+  const firstClear = cleared && !(state.raidClears[r.id] ?? 0);
+  let weapon: WeaponId | null = null;
+  let unlockedSkill: SkillId | null = null;
+  let s: GameState = { ...state, raid: null, queuedHits: [], gold: state.gold + gold };
+
+  if (cleared) {
+    s.raidClears = { ...s.raidClears, [r.id]: (s.raidClears[r.id] ?? 0) + 1 };
+    if (firstClear && r.id === 'typhoeus') {
+      weapon = s.god === 'poseidon' ? 'poseidon_trident' : 'zeus_thunderbolt'; // 자기 신의 초월 무기 확정
+    } else {
+      weapon = randomWeaponOf(rollRarity(info.weaponTable, rng), rng);
+    }
+    s = addWeapon(s, weapon);
+    result.drops.push(weapon);
+    if (firstClear && r.id === 'gigantomachy') {
+      unlockedSkill = gigantoRewardSkill(s.god);
+      if (unlockedSkill) s.unlockedSkills = [...s.unlockedSkills, unlockedSkill];
+    }
+  }
+  s = gainXp(s, xp, result);
+
+  const raidResult: RaidResult = { id: r.id, cleared, damagePct, gold, xp, weapon, unlockedSkill, firstClear };
+  result.raidEvents.push(cleared ? 'clear' : 'fail');
+  return { ...s, raidResult };
+}
+
+function rollRarity(table: [Rarity, number][], rng: Rng): Rarity {
+  let roll = rng();
+  for (const [rarity, p] of table) {
+    roll -= p;
+    if (roll < 0) return rarity;
+  }
+  return table[table.length - 1][0];
+}
+
+/** 개발용: 레이드가 열리는 레벨로 올리고 입장권을 다시 채운다 (티포에우스는 기간토마키아를 깨야 열린다) */
+export function devUnlockRaids(state: GameState): GameState {
+  return {
+    ...state,
+    level: Math.max(state.level, TYPHON_UNLOCK_LEVEL),
+    raidTickets: { day: '', used: {} },
+  };
 }

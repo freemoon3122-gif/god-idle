@@ -1,12 +1,13 @@
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, AppState, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, AppState, ScrollView, ScrollViewInstance, StyleSheet, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
 import {
   ActionResult,
   GameState,
   GodId,
+  RaidId,
   SkillId,
   UpgradeId,
 } from './src/game/types';
@@ -19,21 +20,27 @@ import {
   devAddGold,
   devGiveWeapon,
   devSetLevel,
+  devUnlockRaids,
+  dismissRaidResult,
   enhanceWeapon,
   equipWeapon,
   fuseWeapon,
+  leaveRaid,
   needsGodChoice,
   newGame,
   offlineReward,
   OfflineReward,
+  startRaid,
   tap,
   tick,
 } from './src/game/engine';
+import { StoryLine, storyFor } from './src/game/story';
 import { loadGame, saveGame } from './src/storage/save';
 import { BattleHandle, BattleView } from './src/ui/BattleView';
 import { DevPanel } from './src/ui/DevPanel';
 import { EvolveModal, GodChoiceModal, OfflineModal } from './src/ui/Modals';
 import { SkillBar, StatusBar as GameStatusBar, UpgradeList, WeaponPanel } from './src/ui/Panels';
+import { RaidPanel, RaidResultModal, StoryModal } from './src/ui/RaidUI';
 import { colors } from './src/ui/theme';
 import { WeaponId } from './src/game/weapons';
 
@@ -54,6 +61,10 @@ export default function App() {
   const [offline, setOffline] = useState<OfflineReward | null>(null);
   const [evolved, setEvolved] = useState(false);
   const [buyAmount, setBuyAmount] = useState(1); // 강화 한 번에 몇 단계씩 살지 (×1/×10/×50/×100)
+  const scrollRef = useRef<ScrollViewInstance>(null);
+  // 레이드 컷신: 보여 줄 대사 목록과 지금 몇 번째 줄인지. 컷신이 떠 있는 동안 게임 시간은 멈춘다.
+  const [story, setStory] = useState<{ lines: StoryLine[]; index: number } | null>(null);
+  const storyRef = useRef(false);
 
   /** 엔진이 돌려준 결과를 화면 상태에 반영한다. 모든 행동이 이 함수를 거친다. */
   const apply = useCallback((r: ActionResult) => {
@@ -61,7 +72,25 @@ export default function App() {
     setGame(r.state);
     battleRef.current?.play(r); // 타격·스킬·무기 획득 연출
     if (r.evolvedTo === 'teen') setEvolved(true);
+    // 레이드 이벤트(입장, 보스 등장, 힘줄 절단...)에 맞는 컷신 대사를 모은다
+    const raidId = r.state.raid?.id ?? r.state.raidResult?.id;
+    if (raidId && r.raidEvents.length) {
+      const lines = r.raidEvents.flatMap((ev) => storyFor(ev, raidId, r.state.god) ?? []);
+      if (lines.length) {
+        storyRef.current = true;
+        setStory((cur) => (cur ? { ...cur, lines: [...cur.lines, ...lines] } : { lines, index: 0 }));
+      }
+    }
   }, []);
+
+  const nextLine = () =>
+    setStory((cur) => {
+      if (!cur || cur.index + 1 >= cur.lines.length) {
+        storyRef.current = false;
+        return null;
+      }
+      return { ...cur, index: cur.index + 1 };
+    });
 
   const save = useCallback(() => {
     if (gameRef.current) saveGame({ ...gameRef.current, savedAt: Date.now() });
@@ -93,7 +122,7 @@ export default function App() {
       const now = Date.now();
       const dt = Math.min(now - last, 1000); // 탭이 잠들었다 깨어나도 한 번에 너무 많이 진행하지 않게
       last = now;
-      if (gameRef.current) apply(tick(gameRef.current, dt));
+      if (gameRef.current && !storyRef.current) apply(tick(gameRef.current, dt)); // 컷신 중에는 시간이 멈춘다
       if (now - lastSave > SAVE_EVERY_MS) {
         save();
         lastSave = now;
@@ -118,7 +147,14 @@ export default function App() {
   /** 연출이 필요 없는 단순한 상태 변경 (강화 구매, 장착 등) */
   const act = (fn: (s: GameState) => GameState, drops: WeaponId[] = []) => {
     if (!gameRef.current) return;
-    apply({ state: fn(gameRef.current), hits: [], casts: [], drops, killed: false, bossFailed: false, levelUps: 0, evolvedTo: null });
+    apply({ state: fn(gameRef.current), hits: [], casts: [], drops, killed: false, bossFailed: false, levelUps: 0, evolvedTo: null, raidEvents: [] });
+  };
+
+  const enterRaid = (id: RaidId) => {
+    if (!gameRef.current) return;
+    scrollRef.current?.scrollTo({ y: 0, animated: false }); // 전투 화면이 보이도록 맨 위로
+    apply(startRaid(gameRef.current, id, Date.now()));
+    save();
   };
 
   const fuse = (id: WeaponId) => {
@@ -130,15 +166,17 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <SafeAreaView style={styles.root}>
-        <ScrollView contentContainerStyle={styles.content}>
+        <ScrollView ref={scrollRef} contentContainerStyle={styles.content}>
           <GameStatusBar state={game} />
           <BattleView
             ref={battleRef}
             state={game}
             onTap={() => gameRef.current && apply(tap(gameRef.current))}
             onChallengeBoss={() => act(challengeBoss)}
+            onLeaveRaid={() => gameRef.current && apply(leaveRaid(gameRef.current))}
           />
           <SkillBar state={game} onCast={(id: SkillId) => gameRef.current && apply(castSkill(gameRef.current, id))} />
+          <RaidPanel state={game} onEnter={enterRaid} />
           <UpgradeList
             state={game}
             buyAmount={buyAmount}
@@ -157,6 +195,7 @@ export default function App() {
               onAddGold={() => act((s) => devAddGold(s, Math.max(1000, s.gold * 1000)))}
               onReset={() => act(() => newGame(Date.now()))}
               onGiveWeapon={(id) => gameRef.current && apply(devGiveWeapon(gameRef.current, id))}
+              onUnlockRaids={() => act(devUnlockRaids)}
             />
           )}
         </ScrollView>
@@ -168,6 +207,14 @@ export default function App() {
           onChoose={(god: GodId) => {
             act((s) => chooseGod(s, god));
             setEvolved(false);
+            save();
+          }}
+        />
+        <StoryModal lines={story?.lines ?? null} index={story?.index ?? 0} onNext={nextLine} />
+        <RaidResultModal
+          result={story ? null : game.raidResult}
+          onClose={() => {
+            act(dismissRaidResult);
             save();
           }}
         />

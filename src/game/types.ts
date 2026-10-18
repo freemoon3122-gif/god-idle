@@ -13,7 +13,14 @@ export type SkillId =
   | 'zeus_judgment' // 제우스 궁극기 (Lv.1000)
   | 'poseidon_wave'
   | 'poseidon_trident'
-  | 'poseidon_kraken'; // 포세이돈 궁극기 (Lv.1000)
+  | 'poseidon_kraken' // 포세이돈 궁극기 (Lv.1000)
+  | 'zeus_gigas' // 레이드 「기간토마키아」 첫 클리어 보상 (제우스)
+  | 'poseidon_nisyros'; // 레이드 「기간토마키아」 첫 클리어 보상 (포세이돈)
+
+export type RaidId = 'gigantomachy' | 'typhoeus';
+
+/** 레이드 중 일어나는 일. 화면에서 컷신·연출을 띄우는 데 쓴다. */
+export type RaidEvent = 'intro' | 'boss' | 'tendon' | 'hermes' | 'enrage' | 'breath' | 'clear' | 'fail';
 
 /** 성장 단계: 아기(1~99) → 청소년(100~199) → 신(200~) */
 export type Form = 'baby' | 'teen' | 'god';
@@ -41,6 +48,38 @@ export interface QueuedHit {
   total: number; // 전체 타격 수
 }
 
+/** 진행 중인 레이드 */
+export interface RaidState {
+  id: RaidId;
+  phase: number; // 몇 번째 적인지 (0부터)
+  monster: Monster;
+  timeLeft: number; // 제한 시간 (ms)
+  baseDps: number; // 입장할 때의 전투력. 보스 체력을 이 값에 맞춘다
+  totalHp: number; // 모든 적의 체력 합 (실패 시 보상 비율 계산용)
+  totalDamage: number;
+  // 기간토마키아: 헤라클레스의 화살 → 필멸의 표식
+  heraclesCooldown: number;
+  markLeft: number;
+  // 티포에우스: 힘줄 절단 → 헤르메스와 판이 되찾아 옴 → 되찾은 힘
+  tendonLeft: number;
+  tendonDone: boolean;
+  restoredLeft: number;
+  breathCooldown: number;
+  stunLeft: number; // 브레스에 맞아 기절한 시간 (자동 공격 불가)
+  enraged: boolean;
+}
+
+export interface RaidResult {
+  id: RaidId;
+  cleared: boolean;
+  damagePct: number; // 넣은 피해 비율 (0~1)
+  gold: number;
+  xp: number;
+  weapon: WeaponId | null;
+  unlockedSkill: SkillId | null; // 첫 클리어 보상 스킬
+  firstClear: boolean;
+}
+
 /**
  * 저장되는 게임 상태. JSON으로 바꿔서 기기에 저장하므로 함수는 넣지 않는다.
  * (Java의 Serializable DTO와 비슷하다.)
@@ -64,6 +103,11 @@ export interface GameState {
   weapons: Partial<Record<WeaponId, number>>; // 가진 무기와 개수
   weaponEnhance: Partial<Record<WeaponId, number>>; // 초월 무기 강화 단계
   equippedWeapon: WeaponId | null;
+  raid: RaidState | null; // 레이드 중이면 여기 있고, 메인 전투는 멈춘다
+  raidTickets: { day: string; used: Partial<Record<RaidId, number>> }; // 하루 입장 횟수
+  raidClears: Partial<Record<RaidId, number>>;
+  raidResult: RaidResult | null; // 화면에 보여줄 레이드 결과
+  unlockedSkills: SkillId[]; // 레이드 보상으로 얻은 스킬
   totalKills: number;
   savedAt: number; // 마지막 저장 시각 (Date.now()). 오프라인 보상 계산용
 }
@@ -72,7 +116,7 @@ export interface GameState {
 export interface Hit {
   damage: number;
   crit: boolean;
-  source: 'auto' | 'tap' | SkillId;
+  source: 'auto' | 'tap' | 'heracles' | SkillId;
   /** 연타 스킬이면 몇 번째 타격인지 (화면 연출용) */
   combo?: { index: number; total: number };
 }
@@ -83,6 +127,7 @@ export interface ActionResult {
   hits: Hit[];
   casts: SkillId[]; // 이번에 시전된 스킬 (화면 연출용)
   drops: WeaponId[]; // 이번에 얻은 무기
+  raidEvents: RaidEvent[];
   killed: boolean;
   bossFailed: boolean;
   levelUps: number;

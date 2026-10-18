@@ -3,6 +3,7 @@ import { Animated, Easing, LayoutChangeEvent, Platform, Pressable, StyleSheet, T
 
 import { BOSS_TIME_LIMIT, SKILLS, stageLabel } from '../game/balance';
 import { formatNumber } from '../game/format';
+import { RAIDS, raidPhases } from '../game/raids';
 import { ActionResult, GameState, Hit, SkillId } from '../game/types';
 import { RARITY_INFO, WEAPONS } from '../game/weapons';
 import Svg, { Circle, Defs, RadialGradient, Stop } from 'react-native-svg';
@@ -30,6 +31,7 @@ interface Props {
   state: GameState;
   onTap: () => void;
   onChallengeBoss: () => void;
+  onLeaveRaid: () => void;
 }
 
 
@@ -40,7 +42,7 @@ interface Props {
  *   - 스킬별 이펙트(참격, 번개, 해일, 촉수...)와 튀어오르는 데미지 숫자
  * forwardRef + useImperativeHandle: 부모가 battleRef.current.play(result)로 이 컴포넌트의 함수를 직접 부를 수 있게 한다.
  */
-export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ state, onTap, onChallengeBoss }, ref) {
+export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ state, onTap, onChallengeBoss, onLeaveRaid }, ref) {
   const [width, setWidth] = useState(360);
   const [effects, setEffects] = useState<Effect[]>([]);
   const nextId = useRef(0);
@@ -65,8 +67,13 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
   const heroSize = heroLayout(hero, heroScale); // 탈것(구름·상어)까지 포함한 크기
   const heroBodyH = spriteSize(hero, heroScale).h;
   const heroFloat = heroSize.floating ? FLOAT_CELLS * heroScale : 0; // 탈것을 타면 살짝 떠 있다
-  const monsterScale = state.monster.isBoss ? 5 : 4;
-  const monsterSize = spriteSize(state.monster.kind, monsterScale);
+  const raid = state.raid;
+  const monster = raid?.monster ?? state.monster; // 레이드 중에는 레이드 적과 싸운다
+  const monsterScale = raid ? 4 : monster.isBoss ? 5 : 4; // 레이드 적은 그림 자체가 커서 배율 4
+  const monsterSize = spriteSize(monster.kind, monsterScale);
+  // 기간토마키아: 헤라클레스가 뒤쪽 바위 언덕 위에서 활을 쏜다
+  const heraclesScale = 2.5;
+  const heracles = { left: width * 0.44, bottom: GROUND + 122, ...spriteSize('heracles', heraclesScale) };
 
   // 좌표 계산 (전투 영역 기준)
   const pos = useRef({ heroX: 0, heroY: 0, monX: 0, monY: 0, monTop: 0, groundY: 0 });
@@ -78,6 +85,10 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
     monTop: HEIGHT - GROUND - monsterSize.h,
     groundY: HEIGHT - GROUND,
   };
+  const heraclesRef = useRef({ x: 0, y: 0 });
+  heraclesRef.current = { x: heracles.left + heracles.w * 0.8, y: HEIGHT - heracles.bottom - heracles.h * 0.55 };
+  const monsterSizeRef = useRef(monsterSize);
+  monsterSizeRef.current = monsterSize;
 
   // 둥실둥실 (무한 반복)
   useEffect(() => {
@@ -109,7 +120,7 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
   useEffect(() => {
     spawn.setValue(0.4);
     Animated.spring(spawn, { toValue: 1, friction: 5, tension: 140, useNativeDriver: ND }).start();
-  }, [state.wave, state.totalKills]);
+  }, [state.wave, state.totalKills, raid?.id, raid?.phase]);
 
   // ───────────── 연출 도구 ─────────────
 
@@ -254,6 +265,15 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
       zoomIt(0.05);
     } else if (id === 'teen_slash') {
       add({ kind: 'glow', x: p.heroX + 30, y: p.heroY - 20, color: '#7FE8FF', size: 140 });
+    } else if (id === 'zeus_gigas') {
+      tintIt('#0A0820', 0.5, 900);
+      flashIt('#FFE97A', 0.5, 240, true);
+      add({ kind: 'glow', x: p.heroX, y: p.heroY, color: '#FFE97A', size: 220 });
+      add({ kind: 'rays', x: p.heroX, y: p.heroY, color: '#FFD54A', size: 260 });
+    } else if (id === 'poseidon_nisyros') {
+      tintIt('#021A33', 0.55, 500);
+      shakeIt(6);
+      add({ kind: 'speedlines', width, height: HEIGHT, x: p.monX, y: p.monY, color: '#5FD3B0' });
     }
   };
 
@@ -378,8 +398,122 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
         });
         return;
       }
+      case 'heracles': {
+        // 헤라클레스의 화살: 언덕에서 날아가 꽂히고, 맞은 거인에게 금빛 「필멸의 표식」이 새겨진다
+        const C = '#FFD54A';
+        const h = heraclesRef.current;
+        add({ kind: 'arrow', fromX: h.x, fromY: h.y, toX: p.monX - 10, toY: p.monY - 10, color: C });
+        later(220, () => {
+          add({ kind: 'burst', x: p.monX, y: p.monY, color: C, size: 90, spikes: 8 });
+          add({ kind: 'groundRing', x: p.monX, y: p.monY, color: C, size: 130 });
+          hitMonster(9);
+          damageText(hit, 22, C);
+        });
+        return;
+      }
+      case 'zeus_gigas': {
+        // 거인 사냥: 짝수 번째는 번개, 홀수 번째는 헤라클레스의 화살. 마지막은 둘이 동시에
+        const i = combo?.index ?? 0;
+        const C = '#FFE97A';
+        const h = heraclesRef.current;
+        if (i % 2 === 0 || last) {
+          add({ kind: 'bolt', width, height: HEIGHT, x: p.monX + (last ? 0 : (Math.random() - 0.5) * 60), toY: p.monY, color: C, thick: last ? 18 : 9, branches: 2 });
+          flashIt('#FFF6B0', last ? 0.8 : 0.35, 180, last);
+        }
+        if (i % 2 === 1 || last) {
+          const fromX = raid?.id === 'gigantomachy' ? h.x : p.heroX;
+          const fromY = raid?.id === 'gigantomachy' ? h.y : p.heroY - 30;
+          add({ kind: 'arrow', fromX, fromY, toX: p.monX, toY: p.monY - 10 + (i % 3) * 10, color: '#FFD54A' });
+        }
+        impact(p.monX, p.monY, C, last ? 1.8 : 0.8, last);
+        hitMonster(last ? 30 : 12, last ? 100 : 20);
+        shakeIt(last ? 18 : 6, last ? 100 : 20);
+        if (last) {
+          zoomIt(0.07);
+          add({ kind: 'groundRing', x: p.monX, y: p.groundY - 4, color: C, size: 280 });
+        }
+        damageText(hit, last ? 38 : 24, C);
+        return;
+      }
+      case 'poseidon_nisyros': {
+        // 니시로스 투척: 섬이 하늘에서 떨어져 내리꽂힌다 → 땅이 갈라지며 큰 충격
+        const C = '#5FD3B0';
+        const size = Math.max(130, monsterSizeRef.current.w * 1.1);
+        add({ kind: 'island', x: p.monX, toY: p.groundY - 10, size });
+        later(390, () => {
+          impact(p.monX, p.monY, '#C9A26B', 2, true);
+          add({ kind: 'debris', x: p.monX, y: p.groundY - 10, color: '#7A5A3E', count: 22, power: 150 });
+          add({ kind: 'debris', x: p.monX, y: p.groundY - 10, color: '#5CC46B', count: 10, power: 110 });
+          add({ kind: 'groundRing', x: p.monX, y: p.groundY - 4, color: C, size: 340 });
+          add({ kind: 'smoke', x: p.monX, y: p.groundY - 20, count: 9 });
+          flashIt('#FFFFFF', 0.9, 420, true);
+          zoomIt(0.1);
+          hitMonster(36, 120);
+          shakeIt(24, 120);
+          damageText(hit, 42, C);
+        });
+        return;
+      }
       default:
         // 지속형 스킬(천둥 폭풍, 삼지창 난무)은 시전 연출만 있다
+        return;
+    }
+  };
+
+  // ───────────── 레이드 기믹 연출 ─────────────
+
+  const playRaidEvent = (ev: ActionResult['raidEvents'][number]) => {
+    const p = pos.current;
+    const m = monsterSizeRef.current;
+    switch (ev) {
+      case 'intro':
+        flashIt('#FFFFFF', 0.8, 400);
+        add({ kind: 'banner', text: '레이드 시작!', color: colors.boss, big: true });
+        return;
+      case 'boss':
+        tintIt('#200000', 0.5, 500);
+        shakeIt(12);
+        add({ kind: 'banner', text: '보스 등장!', color: colors.boss, big: true });
+        return;
+      case 'breath': {
+        // 불길 브레스: 괴물의 입에서 신에게 불길이 뿜어지고, 신은 잠깐 기절
+        const mouthX = p.monX - m.w * 0.12;
+        const mouthY = p.monTop + m.h * 0.35;
+        add({ kind: 'breath', fromX: mouthX, toX: SIDE - 10, y: mouthY + 20, height: 120 });
+        later(250, () => {
+          flashIt('#FF7A1F', 0.5, 400, true);
+          shakeIt(14);
+          add({ kind: 'debris', x: p.heroX, y: p.heroY, color: '#FF7A1F', count: 14, power: 90 });
+        });
+        add({ kind: 'toast', text: '🔥 불길 브레스! 잠깐 기절했다', color: '#FF7A1F' });
+        return;
+      }
+      case 'enrage':
+        tintIt('#3A0000', 0.55, 700);
+        shakeIt(16);
+        zoomIt(0.06);
+        add({ kind: 'banner', text: '티포에우스 분노!', color: '#FF4D4D', big: true });
+        return;
+      case 'tendon':
+        flashIt('#B8323A', 0.7, 500, true);
+        shakeIt(18);
+        add({ kind: 'banner', text: '힘줄 절단!', color: '#FF4D4D', big: true });
+        return;
+      case 'hermes':
+        flashIt('#FFFFFF', 0.6, 300);
+        add({ kind: 'rays', x: p.heroX, y: p.heroY, color: '#FFD54A', size: 300 });
+        add({ kind: 'glow', x: p.heroX, y: p.heroY, color: '#FFD54A', size: 220 });
+        add({ kind: 'banner', text: '힘줄을 되찾았다!', color: colors.gold, big: false });
+        return;
+      case 'clear':
+        flashIt('#FFFFFF', 1, 600, true);
+        zoomIt(0.08);
+        add({ kind: 'rays', x: width / 2, y: 150, color: colors.gold, size: 420 });
+        add({ kind: 'banner', text: '레이드 클리어!', color: colors.gold, big: true });
+        return;
+      case 'fail':
+        tintIt('#000000', 0.5, 400);
+        add({ kind: 'banner', text: '레이드 종료', color: colors.subText, big: false });
         return;
     }
   };
@@ -410,11 +544,13 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
         }
         add({ kind: 'toast', text: `🎁 [${rarity.name}] ${w.name}`, color: rarity.color });
       }
+      r.raidEvents.forEach(playRaidEvent);
     },
   }));
 
-  const { monster } = state;
-  const [skyTop, skyBottom] = skyColors(state);
+  // 기간토마키아는 핏빛 노을, 티포에우스는 용암이 끓는 화산
+  const [skyTop, skyBottom] = raid ? (raid.id === 'gigantomachy' ? ['#2A0E14', '#7A2A1E'] : ['#12040A', '#4A0E08']) : skyColors(state);
+  const phases = raid ? raidPhases(raid.id, state.god) : [];
 
   return (
     <Pressable onPressIn={onTap} onLayout={(e: LayoutChangeEvent) => setWidth(e.nativeEvent.layout.width)} style={styles.outer}>
@@ -425,7 +561,16 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
         ]}
       >
         <View style={[styles.skyTop, { backgroundColor: skyTop }]} />
-        <View style={styles.ground} />
+        <View style={[styles.ground, raid && { backgroundColor: raid.id === 'typhoeus' ? '#3A1208' : '#3A2418' }]} />
+        {raid?.id === 'typhoeus' && <View style={styles.lava} />}
+
+        {/* 헤라클레스: 바위 언덕 위에서 활을 겨눈다 */}
+        {raid?.id === 'gigantomachy' && (
+          <View style={{ position: 'absolute', left: heracles.left, bottom: heracles.bottom - 10 }} pointerEvents="none">
+            <PixelSprite name="heracles" scale={heraclesScale} />
+            <View style={styles.ledge} />
+          </View>
+        )}
 
         {/* 신 */}
         <Animated.View
@@ -464,6 +609,7 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
             </Animated.View>
           )}
           <HeroSprite name={hero} scale={heroScale} />
+          {raid && raid.stunLeft > 0 && <Text style={styles.stun}>💫</Text>}
         </Animated.View>
 
         {/* 몬스터 */}
@@ -481,6 +627,7 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
           }}
         >
           <PixelSprite name={monster.kind} scale={monsterScale} />
+          {raid && raid.markLeft > 0 && <View style={[styles.mark, { width: monsterSize.w, height: monsterSize.h }]} />}
           <Animated.View style={[StyleSheet.absoluteFill, { opacity: hitFlash }]}>
             <PixelSprite name={monster.kind} scale={monsterScale} tint="#FFFFFF" />
           </Animated.View>
@@ -495,14 +642,31 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
 
         {/* HUD: 스테이지, 보스 타이머, 몬스터 체력 */}
         <View style={styles.topRow} pointerEvents="none">
-          <Text style={styles.stage}>스테이지 {stageLabel(state.wave)}</Text>
+          <Text style={styles.stage}>
+            {raid ? `${RAIDS[raid.id].emoji} ${RAIDS[raid.id].name} ${raid.phase + 1}/${phases.length}` : `스테이지 ${stageLabel(state.wave)}`}
+          </Text>
+          {raid && <Text style={[styles.buff, { color: raid.timeLeft < 15_000 ? colors.hp : colors.text }]}>⏱ {Math.ceil(raid.timeLeft / 1000)}초</Text>}
           {state.buff && (
             <Text style={styles.buff}>
               {SKILLS[state.buff.skill].emoji} {Math.ceil(state.buff.timeLeft / 1000)}초
             </Text>
           )}
         </View>
-        {state.bossTimeLeft !== null && (
+        {raid && (
+          <View style={styles.bossTimerTrack} pointerEvents="none">
+            <View style={[styles.bossTimerFill, { width: `${Math.max(0, raid.timeLeft / RAIDS[raid.id].timeLimit) * 100}%` }]} />
+          </View>
+        )}
+        {raid && (
+          <View style={styles.chips} pointerEvents="none">
+            {raidChips(raid).map(([text, color]) => (
+              <Text key={text} style={[styles.chip, { borderColor: color, color }]}>
+                {text}
+              </Text>
+            ))}
+          </View>
+        )}
+        {!raid && state.bossTimeLeft !== null && (
           <View style={styles.bossTimerTrack} pointerEvents="none">
             <View style={[styles.bossTimerFill, { width: `${Math.min(1, state.bossTimeLeft / BOSS_TIME_LIMIT) * 100}%` }]} />
           </View>
@@ -510,14 +674,18 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
         <View style={styles.monsterInfo} pointerEvents="none">
           <Text style={[styles.monsterName, monster.isBoss && { color: colors.boss }]}>{monster.name}</Text>
           <View style={styles.hpTrack}>
-            <View style={[styles.hpFill, { width: `${(monster.hp / monster.maxHp) * 100}%` }]} />
+            <View style={[styles.hpFill, { width: `${Math.max(0, monster.hp / monster.maxHp) * 100}%` }]} />
           </View>
           <Text style={styles.hpText}>
             {formatNumber(monster.hp)} / {formatNumber(monster.maxHp)}
           </Text>
         </View>
 
-        {state.farming ? (
+        {raid ? (
+          <Pressable onPress={onLeaveRaid} style={[styles.challenge, { backgroundColor: 'rgba(0,0,0,0.55)' }]}>
+            <Text style={styles.challengeText}>🏳️ 포기하고 나가기</Text>
+          </Pressable>
+        ) : state.farming ? (
           <Pressable onPress={onChallengeBoss} style={styles.challenge}>
             <Text style={styles.challengeText}>👑 보스 재도전</Text>
           </Pressable>
@@ -531,6 +699,21 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
   );
 });
 
+/** 레이드 기믹 상태를 HUD 칩으로: [글자, 색] */
+function raidChips(r: NonNullable<GameState['raid']>): [string, string][] {
+  const sec = (ms: number) => `${Math.ceil(ms / 1000)}초`;
+  const chips: [string, string][] = [];
+  if (r.id === 'gigantomachy') {
+    chips.push(r.markLeft > 0 ? [`🎯 필멸의 표식 ×1.5 ${sec(r.markLeft)}`, colors.gold] : ['🛡️ 불사의 거인: 피해 ½', '#A79FCC']);
+  } else {
+    if (r.tendonLeft > 0) chips.push([`🩸 힘줄 절단 ×0.2 ${sec(r.tendonLeft)}`, '#FF6B6B']);
+    if (r.restoredLeft > 0) chips.push([`🪽 되찾은 힘 ×1.5 ${sec(r.restoredLeft)}`, colors.gold]);
+    if (r.stunLeft > 0) chips.push(['💫 기절', '#FF9F43']);
+    if (r.enraged) chips.push(['🔥 분노', '#FF4D4D']);
+  }
+  return chips;
+}
+
 export function skillColor(id: SkillId): string {
   switch (id) {
     case 'teen_slash':
@@ -538,12 +721,15 @@ export function skillColor(id: SkillId): string {
     case 'zeus_bolt':
     case 'zeus_storm':
     case 'zeus_judgment':
+    case 'zeus_gigas':
       return '#FFE97A';
     case 'poseidon_wave':
     case 'poseidon_trident':
       return '#6FE3FF';
     case 'poseidon_kraken':
       return '#B48CFF';
+    case 'poseidon_nisyros':
+      return '#5FD3B0';
   }
 }
 
@@ -580,4 +766,10 @@ const styles = StyleSheet.create({
     borderRadius: 999,
   },
   challengeText: { color: '#fff', fontWeight: '800' },
+  lava: { position: 'absolute', left: 0, right: 0, bottom: GROUND - 6, height: 6, backgroundColor: '#FF7A1F', opacity: 0.8 },
+  ledge: { width: 70, height: 14, marginLeft: -10, marginTop: -4, borderRadius: 8, backgroundColor: '#5A3A2A', borderWidth: 2, borderColor: '#1C1430' },
+  stun: { position: 'absolute', top: -6, alignSelf: 'center', fontSize: 26 },
+  mark: { position: 'absolute', left: 0, top: 0, borderRadius: 999, borderWidth: 3, borderColor: 'rgba(255, 213, 74, 0.8)', backgroundColor: 'rgba(255, 213, 74, 0.12)' },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, paddingHorizontal: 12, marginTop: 6 },
+  chip: { fontSize: 11, fontWeight: '800', borderWidth: 1.5, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2, backgroundColor: 'rgba(0,0,0,0.45)', overflow: 'hidden' },
 });

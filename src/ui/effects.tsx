@@ -32,7 +32,10 @@ export type EffectSpec =
   | { kind: 'thrust'; fromX: number; toX: number; y: number; color: string }
   | { kind: 'ghost'; x: number; bottom: number; sprite: string; scale: number; color: string; dx: number }
   | { kind: 'banner'; text: string; color: string; big: boolean }
-  | { kind: 'toast'; text: string; color: string };
+  | { kind: 'toast'; text: string; color: string }
+  | { kind: 'arrow'; fromX: number; fromY: number; toX: number; toY: number; color: string }
+  | { kind: 'island'; x: number; toY: number; size: number }
+  | { kind: 'breath'; fromX: number; toX: number; y: number; height: number };
 
 export type Effect = EffectSpec & { id: number };
 
@@ -74,6 +77,12 @@ export function EffectView({ effect, onDone }: { effect: Effect; onDone: (id: nu
       return <Banner {...e} onDone={done} />;
     case 'toast':
       return <Toast {...e} onDone={done} />;
+    case 'arrow':
+      return <Arrow {...e} onDone={done} />;
+    case 'island':
+      return <Island {...e} onDone={done} />;
+    case 'breath':
+      return <Breath {...e} onDone={done} />;
   }
 }
 
@@ -709,6 +718,135 @@ function Toast({ text, color, onDone }: { text: string; color: string; onDone: (
       ]}
     >
       <Text style={[styles.toastText, { color }]}>{text}</Text>
+    </Animated.View>
+  );
+}
+
+// ───────────── 헤라클레스의 화살: 빛꼬리를 끌며 일직선으로 날아가 꽂힌다 ─────────────
+
+function Arrow({ fromX, fromY, toX, toY, color, onDone }: { fromX: number; fromY: number; toX: number; toY: number; color: string; onDone: () => void }) {
+  const p = useProgress(220, onDone, Easing.in(Easing.quad));
+  const gid = useGradientId('ar');
+  const len = Math.hypot(toX - fromX, toY - fromY);
+  const angle = (Math.atan2(toY - fromY, toX - fromX) * 180) / Math.PI;
+  const A = 44; // 화살(빛꼬리 포함) 길이
+  const h = 12;
+  // RN의 rotate는 상자 가운데를 축으로 돈다 → 출발점과 도착점의 한가운데에 상자를 놓고 돌린 뒤,
+  // 상자 안에서 화살을 왼쪽 끝 → 오른쪽 끝으로 움직인다 (회전된 좌표계 안에서의 이동)
+  return (
+    <View
+      pointerEvents="none"
+      style={{ position: 'absolute', left: (fromX + toX) / 2 - len / 2, top: (fromY + toY) / 2 - h / 2, width: len, height: h, transform: [{ rotate: `${angle}deg` }] }}
+    >
+      <Animated.View
+        style={{
+          width: A,
+          height: h,
+          opacity: p.interpolate({ inputRange: [0, 0.85, 1], outputRange: [1, 1, 0.3] }),
+          transform: [{ translateX: p.interpolate({ inputRange: [0, 1], outputRange: [0, len - A] }) }],
+        }}
+      >
+        <Svg width={A} height={h}>
+          <Defs>
+            <LinearGradient id={gid} x1="0" y1="0" x2="1" y2="0">
+              <Stop offset="0" stopColor={color} stopOpacity="0" />
+              <Stop offset="1" stopColor={color} stopOpacity="0.9" />
+            </LinearGradient>
+          </Defs>
+          <Polygon points={`0,${h / 2 - 1} ${A - 10},${h / 2 - 3} ${A - 10},${h / 2 + 3} 0,${h / 2 + 1}`} fill={`url(#${gid})`} />
+          <Polyline points={`10,${h / 2} ${A - 8},${h / 2}`} stroke="#7A4A26" strokeWidth={2.5} />
+          <Polygon points={`10,${h / 2} 4,1 8,${h / 2} 4,${h - 1}`} fill="#FFFFFF" />
+          <Polygon points={`${A - 10},1 ${A},${h / 2} ${A - 10},${h - 1}`} fill="#EEF3FB" stroke={color} strokeWidth={1} />
+        </Svg>
+      </Animated.View>
+    </View>
+  );
+}
+
+// ───────────── 니시로스 투척: 뜯겨 나온 섬(풀 덮인 바위)이 하늘에서 떨어져 내리꽂힌다 ─────────────
+
+function Island({ x, toY, size, onDone }: { x: number; toY: number; size: number; onDone: () => void }) {
+  const p = useProgress(650, onDone, Easing.linear);
+  const w = size;
+  const h = size * 0.8;
+  // 위는 평평한 풀밭, 아래는 뾰족하게 뜯겨 나간 바위
+  const rock = `0,${h * 0.28} ${w * 0.12},${h * 0.18} ${w * 0.88},${h * 0.16} ${w},${h * 0.3} ${w * 0.84},${h * 0.62} ${w * 0.62},${h * 0.7} ${w * 0.5},${h} ${w * 0.36},${h * 0.72} ${w * 0.16},${h * 0.6}`;
+  const grass = `0,${h * 0.28} ${w * 0.12},${h * 0.12} ${w * 0.3},${h * 0.06} ${w * 0.6},${h * 0.05} ${w * 0.88},${h * 0.1} ${w},${h * 0.3} ${w * 0.5},${h * 0.36}`;
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={{
+        position: 'absolute',
+        left: x - w / 2,
+        top: toY - h * 0.75,
+        width: w,
+        height: h,
+        // 0~0.6: 가속하며 떨어짐 / 0.6~1: 박힌 채로 조금 가라앉으며 사라짐
+        opacity: p.interpolate({ inputRange: [0, 0.75, 1], outputRange: [1, 1, 0] }),
+        transform: [
+          { translateY: p.interpolate({ inputRange: [0, 0.2, 0.4, 0.6, 1], outputRange: [-toY - h, -toY * 0.86 - h * 0.8, -toY * 0.5 - h * 0.4, 0, 14] }) },
+          { rotate: p.interpolate({ inputRange: [0, 0.6, 1], outputRange: ['-24deg', '6deg', '6deg'] }) },
+        ],
+      }}
+    >
+      <Svg width={w} height={h}>
+        <Polygon points={rock} fill="#7A5A3E" stroke="#1C1430" strokeWidth={3} strokeLinejoin="round" />
+        <Polyline points={`${w * 0.3},${h * 0.35} ${w * 0.38},${h * 0.52} ${w * 0.34},${h * 0.62}`} stroke="#4A3423" strokeWidth={3} fill="none" />
+        <Polyline points={`${w * 0.66},${h * 0.32} ${w * 0.6},${h * 0.5}`} stroke="#4A3423" strokeWidth={3} fill="none" />
+        <Polygon points={grass} fill="#5CC46B" stroke="#1C1430" strokeWidth={3} strokeLinejoin="round" />
+        <Ellipse cx={w * 0.7} cy={h * 0.02} rx={w * 0.09} ry={h * 0.09} fill="#2F8A45" stroke="#1C1430" strokeWidth={2} />
+        <Ellipse cx={w * 0.28} cy={h * 0.05} rx={w * 0.07} ry={h * 0.07} fill="#2F8A45" stroke="#1C1430" strokeWidth={2} />
+      </Svg>
+    </Animated.View>
+  );
+}
+
+// ───────────── 불길 브레스: 괴물의 입에서 원뿔 모양 불길이 신을 향해 뿜어져 나온다 ─────────────
+
+function Breath({ fromX, toX, y, height, onDone }: { fromX: number; toX: number; y: number; height: number; onDone: () => void }) {
+  const p = useProgress(950, onDone, Easing.linear);
+  const gid = useGradientId('br');
+  const len = fromX - toX;
+  const h = height;
+  // 오른쪽 끝(입)을 기준으로 왼쪽으로 늘어나야 한다. scaleX는 가운데 기준이라 translateX로 보정한다.
+  const scale = p.interpolate({ inputRange: [0, 0.25, 1], outputRange: [0.05, 1, 1] });
+  const shift = p.interpolate({ inputRange: [0, 0.25, 1], outputRange: [len * 0.475, 0, 0] });
+  const flames = useMemo(
+    () =>
+      Array.from({ length: 7 }, (_, i) => {
+        const fx = len * (0.1 + i * 0.12);
+        const r = h * (0.18 + (1 - i / 7) * 0.2);
+        return { cx: fx, cy: h / 2 + (Math.random() - 0.5) * h * 0.4, r };
+      }),
+    [],
+  );
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={{
+        position: 'absolute',
+        left: toX,
+        top: y - h / 2,
+        width: len,
+        height: h,
+        opacity: p.interpolate({ inputRange: [0, 0.1, 0.3, 0.4, 0.5, 0.75, 1], outputRange: [0, 1, 0.8, 1, 0.85, 1, 0] }),
+        transform: [{ translateX: shift }, { scaleX: scale }],
+      }}
+    >
+      <Svg width={len} height={h}>
+        <Defs>
+          <LinearGradient id={gid} x1="1" y1="0" x2="0" y2="0">
+            <Stop offset="0" stopColor="#FFF27A" stopOpacity="1" />
+            <Stop offset="0.35" stopColor="#FF7A1F" stopOpacity="0.95" />
+            <Stop offset="1" stopColor="#B8323A" stopOpacity="0.15" />
+          </LinearGradient>
+        </Defs>
+        <Polygon points={`${len},${h * 0.42} 0,0 0,${h} ${len},${h * 0.58}`} fill={`url(#${gid})`} />
+        {flames.map((f, i) => (
+          <Circle key={i} cx={f.cx} cy={f.cy} r={f.r} fill={i % 2 ? '#FF7A1F' : '#FFB347'} fillOpacity={0.55} />
+        ))}
+        <Polygon points={`${len},${h * 0.47} ${len * 0.2},${h * 0.3} ${len * 0.2},${h * 0.7} ${len},${h * 0.53}`} fill="#FFF6B0" fillOpacity={0.7} />
+      </Svg>
     </Animated.View>
   );
 }

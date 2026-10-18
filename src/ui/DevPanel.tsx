@@ -8,6 +8,7 @@ interface Props {
   onAddGold: () => void;
   onReset: () => void;
   onGiveWeapon: (id: WeaponId) => void;
+  onUnlockRaids: () => void;
 }
 
 /**
@@ -16,7 +17,7 @@ interface Props {
  * App Store용 정식 빌드에서는 false가 되어 이 패널이 아예 사라진다.
  * (Java로 치면 컴파일 시점 상수 `static final boolean DEBUG`로 디버그 코드를 감싸는 것과 같다.)
  */
-export function DevPanel({ onSetLevel, onAddGold, onReset, onGiveWeapon }: Props) {
+export function DevPanel({ onSetLevel, onAddGold, onReset, onGiveWeapon, onUnlockRaids }: Props) {
   const buttons: [string, () => void][] = [
     ['Lv.99', () => onSetLevel(99)],
     ['Lv.100', () => onSetLevel(100)],
@@ -28,6 +29,7 @@ export function DevPanel({ onSetLevel, onAddGold, onReset, onGiveWeapon }: Props
     ['레전드 ×3', () => [0, 1, 2].forEach(() => onGiveWeapon('hades_scythe'))],
     ['⚡ 번개', () => onGiveWeapon('zeus_thunderbolt')],
     ['🔱 삼지창', () => onGiveWeapon('poseidon_trident')],
+    ['⚔️ 레이드 해금', onUnlockRaids],
     ['초기화', onReset],
   ];
   return (
