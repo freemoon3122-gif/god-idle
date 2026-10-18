@@ -680,6 +680,7 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
         }
         add({ kind: 'toast', text: `🎁 [${rarity.name}] ${w.name}`, color: rarity.color });
       }
+      if (r.diamonds > 0) add({ kind: 'toast', text: `💎 다이아 +${r.diamonds}`, color: '#7FE8FF' });
       r.raidEvents.forEach(playRaidEvent);
     },
   }));

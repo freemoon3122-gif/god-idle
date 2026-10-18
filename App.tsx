@@ -13,10 +13,12 @@ import {
 } from './src/game/types';
 import {
   applyOfflineReward,
+  buyCoins,
   buyUpgradeBulk,
   castSkill,
   challengeBoss,
   chooseGod,
+  devAddDiamonds,
   devAddGold,
   devGiveWeapon,
   devSetLevel,
@@ -25,6 +27,7 @@ import {
   enhanceWeapon,
   equipWeapon,
   fuseWeapon,
+  gacha,
   leaveRaid,
   needsGodChoice,
   newGame,
@@ -33,6 +36,7 @@ import {
   startRaid,
   tap,
   tick,
+  upgradeSkill,
 } from './src/game/engine';
 import { StoryLine, storyFor } from './src/game/story';
 import { loadGame, saveGame } from './src/storage/save';
@@ -41,6 +45,7 @@ import { DevPanel } from './src/ui/DevPanel';
 import { EvolveModal, GodChoiceModal, OfflineModal } from './src/ui/Modals';
 import { SkillBar, StatusBar as GameStatusBar, UpgradeList, WeaponPanel } from './src/ui/Panels';
 import { RaidPanel, RaidResultModal, StoryModal } from './src/ui/RaidUI';
+import { GachaResultModal, ShopPanel, SkillUpgradePanel } from './src/ui/ShopUI';
 import { colors } from './src/ui/theme';
 import { WeaponId } from './src/game/weapons';
 
@@ -65,6 +70,7 @@ export default function App() {
   // 레이드 컷신: 보여 줄 대사 목록과 지금 몇 번째 줄인지. 컷신이 떠 있는 동안 게임 시간은 멈춘다.
   const [story, setStory] = useState<{ lines: StoryLine[]; index: number } | null>(null);
   const storyRef = useRef(false);
+  const [pulls, setPulls] = useState<WeaponId[] | null>(null); // 무기 뽑기 결과
 
   /** 엔진이 돌려준 결과를 화면 상태에 반영한다. 모든 행동이 이 함수를 거친다. */
   const apply = useCallback((r: ActionResult) => {
@@ -148,13 +154,22 @@ export default function App() {
   /** 연출이 필요 없는 단순한 상태 변경 (강화 구매, 장착 등) */
   const act = (fn: (s: GameState) => GameState, drops: WeaponId[] = []) => {
     if (!gameRef.current) return;
-    apply({ state: fn(gameRef.current), hits: [], casts: [], drops, killed: false, bossFailed: false, levelUps: 0, evolvedTo: null, raidEvents: [] });
+    apply({ state: fn(gameRef.current), hits: [], casts: [], drops, killed: false, bossFailed: false, levelUps: 0, evolvedTo: null, raidEvents: [], diamonds: 0 });
   };
 
   const enterRaid = (id: RaidId) => {
     if (!gameRef.current) return;
     scrollRef.current?.scrollTo({ y: 0, animated: false }); // 전투 화면이 보이도록 맨 위로
     apply(startRaid(gameRef.current, id, Date.now()));
+    save();
+  };
+
+  const pull = (count: 1 | 11) => {
+    if (!gameRef.current) return;
+    const r = gacha(gameRef.current, count);
+    if (!r.pulls.length) return;
+    act(() => r.state);
+    setPulls(r.pulls);
     save();
   };
 
@@ -178,6 +193,7 @@ export default function App() {
           />
           <SkillBar state={game} onCast={(id: SkillId) => gameRef.current && apply(castSkill(gameRef.current, id))} />
           <RaidPanel state={game} onEnter={enterRaid} />
+          <SkillUpgradePanel state={game} onUpgrade={(id) => act((s) => upgradeSkill(s, id))} />
           <UpgradeList
             state={game}
             buyAmount={buyAmount}
@@ -190,6 +206,7 @@ export default function App() {
             onFuse={fuse}
             onEnhance={(target, material) => act((s) => enhanceWeapon(s, target, material))}
           />
+          <ShopPanel state={game} onGacha={pull} onBuyCoins={() => act(buyCoins)} />
           {__DEV__ && (
             <DevPanel
               onSetLevel={(level) => gameRef.current && apply(devSetLevel(gameRef.current, level))}
@@ -197,6 +214,7 @@ export default function App() {
               onReset={() => act(() => newGame(Date.now()))}
               onGiveWeapon={(id) => gameRef.current && apply(devGiveWeapon(gameRef.current, id))}
               onUnlockRaids={() => act(devUnlockRaids)}
+              onAddDiamonds={() => act((s) => devAddDiamonds(s, 10_000))}
             />
           )}
         </ScrollView>
@@ -219,6 +237,7 @@ export default function App() {
             save();
           }}
         />
+        <GachaResultModal pulls={pulls} onClose={() => setPulls(null)} />
         <StatusBar style="light" />
       </SafeAreaView>
     </SafeAreaProvider>

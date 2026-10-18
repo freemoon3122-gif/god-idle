@@ -55,6 +55,20 @@ import {
   TENDON_MULTIPLIER,
   TYPHON_UNLOCK_LEVEL,
 } from './raids';
+import {
+  BOSS_FIRST_KILL_DIAMONDS,
+  COIN_PACK,
+  GACHA_11_COST,
+  GACHA_COST,
+  GACHA_GUARANTEED_RATES,
+  GACHA_RATES,
+  RAID_CLEAR_DIAMONDS,
+  raidCoins,
+  SKILL_MAX_LEVEL,
+  skillCooldownFor,
+  skillDamageBonus,
+  skillUpgradeCost,
+} from './economy';
 import { ActionResult, Form, GameState, GodId, Hit, Monster, QueuedHit, RaidId, RaidResult, RaidState, SkillId, UpgradeId } from './types';
 import { FUSE_COST, nextRarity, randomWeaponOf, Rarity, rollWeaponDrop, WEAPON_LIST, WeaponId, weaponPower, WEAPONS } from './weapons';
 
@@ -97,6 +111,9 @@ export function newGame(now: number): GameState {
     raidClears: {},
     raidResult: null,
     unlockedSkills: [],
+    diamonds: 0,
+    coins: 0,
+    skillLevels: {},
     totalKills: 0,
     savedAt: now,
   };
@@ -125,6 +142,9 @@ export function migrate(saved: GameState): GameState {
     raidClears: saved.raidClears ?? {},
     raidResult: null,
     unlockedSkills: saved.unlockedSkills ?? [],
+    diamonds: saved.diamonds ?? 0,
+    coins: saved.coins ?? 0,
+    skillLevels: saved.skillLevels ?? {},
   };
 }
 
@@ -250,6 +270,58 @@ export function tap(state: GameState, rng: Rng = Math.random): ActionResult {
   return result;
 }
 
+// ───────────── 스킬 강화 ─────────────
+
+export function skillLevel(s: GameState, id: SkillId): number {
+  return s.skillLevels[id] ?? 0;
+}
+
+/** 강화가 반영된 쿨타임 (버프·유틸 스킬은 레벨당 −2.5%) */
+export function skillCooldown(s: GameState, id: SkillId): number {
+  return skillCooldownFor(id, skillLevel(s, id));
+}
+
+/** 강화할 수 있는 스킬: 지금 쓸 수 있는 스킬 + 예전 단계에서 쓰던 스킬은 제외 */
+export function canUpgradeSkill(s: GameState, id: SkillId): boolean {
+  const lv = skillLevel(s, id);
+  return availableSkills(s).includes(id) && lv < SKILL_MAX_LEVEL && s.coins >= skillUpgradeCost(lv);
+}
+
+export function upgradeSkill(state: GameState, id: SkillId): GameState {
+  if (!canUpgradeSkill(state, id)) return state;
+  const lv = skillLevel(state, id);
+  return { ...state, coins: state.coins - skillUpgradeCost(lv), skillLevels: { ...state.skillLevels, [id]: lv + 1 } };
+}
+
+// ───────────── 상점: 무기 뽑기, 강화코인 ─────────────
+
+export function gachaCost(count: 1 | 11): number {
+  return count === 1 ? GACHA_COST : GACHA_11_COST;
+}
+
+/**
+ * 무기 뽑기. 11회 뽑기는 마지막 1개가 레전드 이상 확정이다.
+ * 뽑은 무기는 바로 가방에 들어가고, 더 센 무기면 자동 장착된다 (몬스터 드롭과 똑같이).
+ */
+export function gacha(state: GameState, count: 1 | 11, rng: Rng = Math.random): { state: GameState; pulls: WeaponId[] } {
+  const cost = gachaCost(count);
+  if (state.diamonds < cost) return { state, pulls: [] };
+  let s: GameState = { ...state, diamonds: state.diamonds - cost };
+  const pulls: WeaponId[] = [];
+  for (let i = 0; i < count; i++) {
+    const table = count === 11 && i === count - 1 ? GACHA_GUARANTEED_RATES : GACHA_RATES;
+    const id = randomWeaponOf(rollRarity(table, rng), rng);
+    s = addWeapon(s, id);
+    pulls.push(id);
+  }
+  return { state: s, pulls };
+}
+
+export function buyCoins(state: GameState): GameState {
+  if (state.diamonds < COIN_PACK.diamonds) return state;
+  return { ...state, diamonds: state.diamonds - COIN_PACK.diamonds, coins: state.coins + COIN_PACK.coins };
+}
+
 export function canCast(s: GameState, id: SkillId): boolean {
   return availableSkills(s).includes(id) && !s.skillCooldowns[id];
 }
@@ -259,13 +331,14 @@ export function castSkill(state: GameState, id: SkillId, rng: Rng = Math.random)
   if (!canCast(state, id)) return result;
 
   const skill = SKILLS[id];
-  let s: GameState = { ...state, skillCooldowns: { ...state.skillCooldowns, [id]: skill.cooldown } };
+  const cooldown = skillCooldown(state, id);
+  let s: GameState = { ...state, skillCooldowns: { ...state.skillCooldowns, [id]: cooldown } };
   result.casts.push(id);
 
   if (skill.buffDuration) s.buff = { skill: id, timeLeft: skill.buffDuration };
   // 다른 스킬 쿨타임 초기화(신들의 왕) / 절반(바다의 축복)
   if (skill.cooldownEffect) {
-    const next: GameState['skillCooldowns'] = { [id]: skill.cooldown };
+    const next: GameState['skillCooldowns'] = { [id]: cooldown };
     if (skill.cooldownEffect === 'halve') {
       for (const [other, ms] of Object.entries(state.skillCooldowns) as [SkillId, number][]) if (other !== id) next[other] = ms / 2;
     }
@@ -287,7 +360,7 @@ export function castSkill(state: GameState, id: SkillId, rng: Rng = Math.random)
     const hits: QueuedHit[] = Array.from({ length: total }, (_, index) => ({
       skill: id,
       dueIn: index * (skill.hitInterval ?? 0),
-      multiplier: skill.damageMultiplier!,
+      multiplier: skill.damageMultiplier! * skillDamageBonus(id, skillLevel(state, id)),
       index,
       total,
     }));
@@ -464,7 +537,7 @@ export function applyOfflineReward(state: GameState, reward: OfflineReward): Act
 // ───────────── 내부 함수 ─────────────
 
 function emptyResult(state: GameState): ActionResult {
-  return { state, hits: [], casts: [], drops: [], raidEvents: [], killed: false, bossFailed: false, levelUps: 0, evolvedTo: null };
+  return { state, hits: [], casts: [], drops: [], raidEvents: [], killed: false, bossFailed: false, levelUps: 0, evolvedTo: null, diamonds: 0 };
 }
 
 export function spawnMonster(wave: number): Monster {
@@ -494,9 +567,14 @@ function hitMonster(state: GameState, hit: Hit, result: ActionResult, rng: Rng):
   if (hp > 0) return { ...state, monster: { ...state.monster, hp } };
 
   result.killed = true;
+  // 스테이지 보스를 처음 잡으면 다이아 (기록 웨이브의 보스를 파밍이 아닌 상태로 잡았을 때)
+  const firstBossKill = state.monster.isBoss && !state.farming && state.wave >= state.maxWave;
+  const diamonds = firstBossKill ? BOSS_FIRST_KILL_DIAMONDS : 0;
+  result.diamonds += diamonds;
   let s: GameState = {
     ...state,
     gold: state.gold + monsterGold(state.wave, state.levels.gold),
+    diamonds: state.diamonds + diamonds,
     totalKills: state.totalKills + 1,
   };
   s = gainXp(s, xpForKill(state.wave), result);
@@ -765,20 +843,30 @@ function finishRaid(state: GameState, cleared: boolean, result: ActionResult, rn
     }
   }
   s = gainXp(s, xp, result);
+  const coins = raidCoins(cleared, r.stage, damagePct);
+  const diamonds = cleared ? RAID_CLEAR_DIAMONDS : 0;
+  s = { ...s, coins: s.coins + coins, diamonds: s.diamonds + diamonds };
+  result.diamonds += diamonds;
 
   const knockedOut = r.godHp <= 0;
-  const raidResult: RaidResult = { id: r.id, cleared, damagePct, stage: r.stage, knockedOut, gold, xp, weapon, unlockedSkill, firstClear };
+  const raidResult: RaidResult = { id: r.id, cleared, damagePct, stage: r.stage, knockedOut, gold, xp, weapon, unlockedSkill, diamonds, coins, firstClear };
   result.raidEvents.push(cleared ? 'clear' : 'fail');
   return { ...s, raidResult };
 }
 
+/** 확률표에서 등급 하나를 고른다 (표의 숫자는 비율이라 합이 1이든 100이든 상관없다) */
 function rollRarity(table: [Rarity, number][], rng: Rng): Rarity {
-  let roll = rng();
+  let roll = rng() * table.reduce((sum, [, p]) => sum + p, 0);
   for (const [rarity, p] of table) {
     roll -= p;
     if (roll < 0) return rarity;
   }
   return table[table.length - 1][0];
+}
+
+/** 개발용: 다이아 지급 */
+export function devAddDiamonds(state: GameState, amount: number): GameState {
+  return { ...state, diamonds: state.diamonds + amount };
 }
 
 /** 개발용: 레이드가 열리는 레벨로 올리고 입장권을 다시 채운다 (티포에우스는 기간토마키아를 깨야 열린다) */

@@ -91,6 +91,8 @@ export interface RaidResult {
   xp: number;
   weapon: WeaponId | null;
   unlockedSkill: SkillId | null; // 첫 클리어 보상 스킬
+  diamonds: number;
+  coins: number;
   firstClear: boolean;
 }
 
@@ -123,6 +125,9 @@ export interface GameState {
   raidClears: Partial<Record<RaidId, number>>;
   raidResult: RaidResult | null; // 화면에 보여줄 레이드 결과
   unlockedSkills: SkillId[]; // 레이드 보상으로 얻은 스킬
+  diamonds: number; // 💎 캐시 재화
+  coins: number; // 🪙 강화코인 (스킬 강화 재료)
+  skillLevels: Partial<Record<SkillId, number>>; // 스킬 강화 레벨 (없으면 0)
   totalKills: number;
   savedAt: number; // 마지막 저장 시각 (Date.now()). 오프라인 보상 계산용
 }
@@ -147,4 +152,5 @@ export interface ActionResult {
   bossFailed: boolean;
   levelUps: number;
   evolvedTo: Form | null; // 이번에 성장 단계가 바뀌었으면 새 단계
+  diamonds: number; // 이번에 얻은 다이아 (알림용)
 }

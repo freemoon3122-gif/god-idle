@@ -1,7 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { ADULT_LEVEL, formOf, GOD_LEVEL, GODS, SKILLS, TEEN_LEVEL, ULTIMATE_LEVEL, UPGRADES, upgradeCost, xpToNext } from '../game/balance';
-import { availableSkills, bulkPlan, canCast, canEnhance, canFuse, formName, ownedPower } from '../game/engine';
+import { availableSkills, bulkPlan, canCast, canEnhance, canFuse, formName, ownedPower, skillCooldown, skillLevel } from '../game/engine';
 import { formatNumber } from '../game/format';
 import { GameState, SkillId, UpgradeId } from '../game/types';
 import { FUSE_COST, RARITY_INFO, WEAPON_LIST, WeaponId, WEAPONS } from '../game/weapons';
@@ -16,7 +16,12 @@ export function StatusBar({ state }: { state: GameState }) {
         <Text style={styles.level}>
           Lv.{state.level} <Text style={styles.form}>{formName(state)}</Text>
         </Text>
-        <Text style={styles.gold}>💰 {formatNumber(state.gold)}</Text>
+        <View style={{ alignItems: 'flex-end' }}>
+          <Text style={styles.gold}>💰 {formatNumber(state.gold)}</Text>
+          <Text style={styles.currency}>
+            💎 {formatNumber(state.diamonds)}  🪙 {formatNumber(state.coins)}
+          </Text>
+        </View>
       </View>
       <View style={styles.xpTrack}>
         <View style={[styles.xpFill, { width: `${Math.min(1, state.xp / need) * 100}%` }]} />
@@ -70,10 +75,13 @@ export function SkillBar({ state, onCast }: { state: GameState; onCast: (id: Ski
                 ]}
               >
                 {/* 쿨타임 진행 막대 */}
-                {!ready && <View style={[styles.cooldownFill, { width: `${(1 - cd / skill.cooldown) * 100}%` }]} />}
+                {!ready && <View style={[styles.cooldownFill, { width: `${(1 - cd / skillCooldown(state, id)) * 100}%` }]} />}
                 <Text style={styles.skillEmoji}>{skill.emoji}</Text>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.skillName}>{skill.name}</Text>
+                  <Text style={styles.skillName}>
+                    {skill.name}
+                    {skillLevel(state, id) > 0 && <Text style={styles.skillLv}> +{skillLevel(state, id)}</Text>}
+                  </Text>
                   <Text style={styles.skillDesc} numberOfLines={2}>
                     {ready ? skill.description : `${Math.ceil(cd / 1000)}초`}
                   </Text>
@@ -244,6 +252,8 @@ const styles = StyleSheet.create({
   level: { color: colors.text, fontSize: 22, fontWeight: '900' },
   form: { color: colors.subText, fontSize: 15, fontWeight: '700' },
   gold: { color: colors.gold, fontSize: 18, fontWeight: '800' },
+  currency: { color: colors.text, fontSize: 13, fontWeight: '800', marginTop: 2 },
+  skillLv: { color: colors.gold, fontWeight: '900' },
   xpTrack: { height: 8, borderRadius: 4, backgroundColor: colors.panelLight, marginTop: 8 },
   xpFill: { height: '100%', borderRadius: 4, backgroundColor: colors.xp },
   xpText: { color: colors.subText, fontSize: 11, marginTop: 3 },

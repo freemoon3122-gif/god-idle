@@ -133,6 +133,12 @@ export function RaidResultModal({ result, onClose }: { result: RaidResult | null
             )}
             <Text style={styles.reward}>💰 {formatNumber(result.gold)}</Text>
             <Text style={[styles.reward, { color: colors.xp }]}>EXP {formatNumber(result.xp)}</Text>
+            {(result.coins > 0 || result.diamonds > 0) && (
+              <Text style={[styles.rewardLine, { color: colors.text }]}>
+                {result.coins > 0 ? `🪙 강화코인 +${result.coins}  ` : ''}
+                {result.diamonds > 0 ? `💎 +${result.diamonds}` : ''}
+              </Text>
+            )}
             {weapon && (
               <Text style={[styles.rewardLine, { color: RARITY_INFO[weapon.rarity].color }]}>
                 {weapon.emoji} [{RARITY_INFO[weapon.rarity].name}] {weapon.name}
