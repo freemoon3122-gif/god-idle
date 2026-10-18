@@ -3,7 +3,7 @@ import { Animated, Easing, LayoutChangeEvent, Platform, Pressable, StyleSheet, T
 
 import { BOSS_TIME_LIMIT, SKILLS, stageLabel } from '../game/balance';
 import { formatNumber } from '../game/format';
-import { RAIDS, raidPhases } from '../game/raids';
+import { defenseMultiplier, RAIDS, raidPhases } from '../game/raids';
 import { ActionResult, GameState, Hit, SkillId } from '../game/types';
 import { RARITY_INFO, WEAPONS } from '../game/weapons';
 import Svg, { Circle, Defs, RadialGradient, Stop } from 'react-native-svg';
@@ -61,6 +61,8 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
   const squash = useRef(new Animated.Value(1)).current;
   const bob = useRef(new Animated.Value(0)).current;
   const aura = useRef(new Animated.Value(0)).current;
+  const heroHit = useRef(new Animated.Value(0)).current; // 신이 맞으면 빨갛게 번쩍
+  const recoil = useRef(new Animated.Value(0)).current; // 신이 맞으면 뒤로 밀려남
 
   const hero = heroSprite(state);
   const heroScale = state.god ? MOUNTED_SCALE : HERO_SCALE;
@@ -462,6 +464,24 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
 
   // ───────────── 레이드 기믹 연출 ─────────────
 
+  /** 적의 공격: 몬스터가 앞으로 덤벼들고 → 신이 빨갛게 번쩍이며 뒤로 밀린다 → 신 머리 위에 받은 피해 */
+  const strikeHero = (damage: number, color = '#FF4D4D') => {
+    const p = pos.current;
+    Animated.sequence([
+      Animated.timing(knock, { toValue: -36, duration: 90, easing: Easing.in(Easing.quad), useNativeDriver: ND }),
+      Animated.spring(knock, { toValue: 0, friction: 5, tension: 160, useNativeDriver: ND }),
+    ]).start();
+    later(90, () => {
+      heroHit.setValue(1);
+      Animated.timing(heroHit, { toValue: 0, duration: 260, useNativeDriver: ND }).start();
+      recoil.setValue(-14);
+      Animated.spring(recoil, { toValue: 0, friction: 4, tension: 200, useNativeDriver: ND }).start();
+      add({ kind: 'burst', x: p.heroX, y: p.heroY, color, size: 80, spikes: 7 });
+      add({ kind: 'damage', x: p.heroX, y: p.heroY - 70, text: `-${formatNumber(damage)}`, color, size: 22, crit: false });
+      shakeIt(6);
+    });
+  };
+
   const playRaidEvent = (ev: ActionResult['raidEvents'][number]) => {
     const p = pos.current;
     const m = monsterSizeRef.current;
@@ -475,6 +495,14 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
         shakeIt(12);
         add({ kind: 'banner', text: '보스 등장!', color: colors.boss, big: true });
         return;
+      case 'strike':
+        if (raid) strikeHero(raid.attack);
+        return;
+      case 'down':
+        tintIt('#300000', 0.6, 600);
+        shakeIt(18);
+        add({ kind: 'banner', text: '신이 쓰러졌다...', color: '#FF4D4D', big: true });
+        return;
       case 'breath': {
         // 불길 브레스: 괴물의 입에서 신에게 불길이 뿜어지고, 신은 잠깐 기절
         const mouthX = p.monX - m.w * 0.12;
@@ -483,6 +511,7 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
         later(250, () => {
           flashIt('#FF7A1F', 0.5, 400, true);
           shakeIt(14);
+          if (raid) add({ kind: 'damage', x: p.heroX, y: p.heroY - 80, text: `-${formatNumber(raid.attack * 3)}`, color: '#FF7A1F', size: 26, crit: true });
           add({ kind: 'debris', x: p.heroX, y: p.heroY, color: '#FF7A1F', count: 14, power: 90 });
         });
         add({ kind: 'toast', text: '🔥 불길 브레스! 잠깐 기절했다', color: '#FF7A1F' });
@@ -578,7 +607,10 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
             position: 'absolute',
             left: SIDE,
             bottom: GROUND + heroFloat,
-            transform: [{ translateX: dash }, { translateY: bob.interpolate({ inputRange: [0, 1], outputRange: [0, -6] }) }],
+            transform: [
+              { translateX: Animated.add(dash, recoil) },
+              { translateY: bob.interpolate({ inputRange: [0, 1], outputRange: [0, -6] }) },
+            ],
           }}
         >
           {state.buff && (
@@ -609,7 +641,18 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
             </Animated.View>
           )}
           <HeroSprite name={hero} scale={heroScale} />
+          {raid && (
+            <Animated.View style={[StyleSheet.absoluteFill, { opacity: heroHit }]} pointerEvents="none">
+              <HeroSprite name={hero} scale={heroScale} tint="#FF3B3B" />
+            </Animated.View>
+          )}
           {raid && raid.stunLeft > 0 && <Text style={styles.stun}>💫</Text>}
+          {/* 레이드 중 신의 체력 */}
+          {raid && (
+            <View style={[styles.godHpTrack, { width: Math.min(heroSize.w, 110) }]} pointerEvents="none">
+              <View style={[styles.godHpFill, { width: `${Math.max(0, raid.godHp / raid.godMaxHp) * 100}%` }]} />
+            </View>
+          )}
         </Animated.View>
 
         {/* 몬스터 */}
@@ -643,7 +686,9 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
         {/* HUD: 스테이지, 보스 타이머, 몬스터 체력 */}
         <View style={styles.topRow} pointerEvents="none">
           <Text style={styles.stage}>
-            {raid ? `${RAIDS[raid.id].emoji} ${RAIDS[raid.id].name} ${raid.phase + 1}/${phases.length}` : `스테이지 ${stageLabel(state.wave)}`}
+            {raid
+              ? `${RAIDS[raid.id].emoji} ${RAIDS[raid.id].name} ${raid.stage}단계 · ${raid.phase + 1}/${phases.length}`
+              : `스테이지 ${stageLabel(state.wave)}`}
           </Text>
           {raid && <Text style={[styles.buff, { color: raid.timeLeft < 15_000 ? colors.hp : colors.text }]}>⏱ {Math.ceil(raid.timeLeft / 1000)}초</Text>}
           {state.buff && (
@@ -702,7 +747,11 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
 /** 레이드 기믹 상태를 HUD 칩으로: [글자, 색] */
 function raidChips(r: NonNullable<GameState['raid']>): [string, string][] {
   const sec = (ms: number) => `${Math.ceil(ms / 1000)}초`;
-  const chips: [string, string][] = [];
+  const chips: [string, string][] = [
+    [`💙 ${formatNumber(Math.max(0, r.godHp))}/${formatNumber(r.godMaxHp)}`, colors.xp],
+    [`⚔️ ${formatNumber(r.attack)}`, '#FF8A8A'],
+    [`🛡️ ${formatNumber(r.defense)} (피해 ${Math.round(defenseMultiplier(r.defense) * 100)}%)`, '#C9C2E8'],
+  ];
   if (r.id === 'gigantomachy') {
     chips.push(r.markLeft > 0 ? [`🎯 필멸의 표식 ×1.5 ${sec(r.markLeft)}`, colors.gold] : ['🛡️ 불사의 거인: 피해 ½', '#A79FCC']);
   } else {
@@ -768,6 +817,8 @@ const styles = StyleSheet.create({
   challengeText: { color: '#fff', fontWeight: '800' },
   lava: { position: 'absolute', left: 0, right: 0, bottom: GROUND - 6, height: 6, backgroundColor: '#FF7A1F', opacity: 0.8 },
   ledge: { width: 70, height: 14, marginLeft: -10, marginTop: -4, borderRadius: 8, backgroundColor: '#5A3A2A', borderWidth: 2, borderColor: '#1C1430' },
+  godHpTrack: { position: 'absolute', bottom: -12, left: 4, height: 6, borderRadius: 3, backgroundColor: 'rgba(0,0,0,0.5)', overflow: 'hidden' },
+  godHpFill: { height: '100%', backgroundColor: colors.xp },
   stun: { position: 'absolute', top: -6, alignSelf: 'center', fontSize: 26 },
   mark: { position: 'absolute', left: 0, top: 0, borderRadius: 999, borderWidth: 3, borderColor: 'rgba(255, 213, 74, 0.8)', backgroundColor: 'rgba(255, 213, 74, 0.12)' },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, paddingHorizontal: 12, marginTop: 6 },

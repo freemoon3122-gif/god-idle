@@ -27,8 +27,16 @@ import {
 } from './balance';
 import {
   BREATH_INTERVAL,
+  BREATH_DAMAGE,
   BREATH_INTERVAL_ENRAGED,
   dayKey,
+  defenseMultiplier,
+  godRaidHp,
+  raidAttack,
+  RAID_ATTACK_INTERVAL,
+  raidDefense,
+  raidPhaseHp,
+  REWARD_GROWTH,
   ENRAGE_HP_RATIO,
   GIGANTO_UNLOCK_LEVEL,
   gigantoRewardSkill,
@@ -522,24 +530,35 @@ export function canEnterRaid(s: GameState, id: RaidId, now: number): boolean {
 }
 
 /**
- * 레이드 입장. 보스 체력은 "입장할 때의 전투력 × 정해진 초"로 정한다.
- * → 언제 도전해도 비슷한 긴장감이 있고, 강해질수록 보상(최고 웨이브 기준)이 커진다.
+ * 레이드 입장. 단계(= 지금까지 클리어한 횟수)가 적의 능력치를 정한다.
+ * 체력·공격력·방어력 모두 단계에 대한 지수 함수라서, 깰수록 기하급수로 강해진다.
+ * 대신 내 성장과 상관없는 고정값이라, 키우다 보면 다시 따라잡을 수 있다.
  */
+export function raidStage(s: GameState, id: RaidId): number {
+  return s.raidClears[id] ?? 0;
+}
+
 export function startRaid(state: GameState, id: RaidId, now: number): ActionResult {
   const result = emptyResult(state);
   if (!canEnterRaid(state, id, now)) return result;
 
   const today = dayKey(now);
   const used = state.raidTickets.day === today ? state.raidTickets.used : {};
-  const baseDps = averageDps(state);
+  const stage = raidStage(state, id);
   const phases = raidPhases(id, state.god);
+  const godMaxHp = godRaidHp(state.level);
   const raid: RaidState = {
     id,
     phase: 0,
-    monster: raidMonster(id, 0, state.god, baseDps),
+    monster: raidMonster(id, 0, state.god, stage),
     timeLeft: RAIDS[id].timeLimit,
-    baseDps,
-    totalHp: phases.reduce((sum, p) => sum + baseDps * p.hpSeconds, 0),
+    stage,
+    defense: raidDefense(stage),
+    attack: raidAttack(id, stage),
+    attackCooldown: RAID_ATTACK_INTERVAL,
+    godHp: godMaxHp,
+    godMaxHp,
+    totalHp: phases.reduce((sum, p) => sum + raidPhaseHp(id, stage, p), 0),
     totalDamage: 0,
     heraclesCooldown: HERACLES_INTERVAL,
     markLeft: 0,
@@ -573,17 +592,21 @@ export function dismissRaidResult(state: GameState): GameState {
   return { ...state, raidResult: null };
 }
 
-/** 지금 레이드에서 들어가는 피해 배율 (기믹 반영) */
+/** 지금 레이드에서 들어가는 피해 배율 (기믹 × 방어력) */
 export function raidDamageMultiplier(r: RaidState): number {
+  return gimmickMultiplier(r) * defenseMultiplier(r.defense);
+}
+
+function gimmickMultiplier(r: RaidState): number {
   if (r.id === 'gigantomachy') return r.markLeft > 0 ? MARK_MULTIPLIER : IMMORTAL_MULTIPLIER;
   if (r.tendonLeft > 0) return TENDON_MULTIPLIER;
   if (r.restoredLeft > 0) return RESTORED_MULTIPLIER;
   return 1;
 }
 
-function raidMonster(id: RaidId, phase: number, god: GodId | null, baseDps: number): Monster {
+function raidMonster(id: RaidId, phase: number, god: GodId | null, stage: number): Monster {
   const p = raidPhases(id, god)[phase];
-  const hp = Math.ceil(baseDps * p.hpSeconds);
+  const hp = raidPhaseHp(id, stage, p);
   return { kind: p.kind, name: p.name, hp, maxHp: hp, isBoss: p.isBoss };
 }
 
@@ -599,8 +622,20 @@ function raidTick(state: GameState, dt: number, result: ActionResult, rng: Rng):
 
   if (r.timeLeft <= 0) return finishRaid(s, false, result, rng);
 
+  // 적의 공격: 3초마다 신의 체력을 공격력만큼 깎는다. 0이 되면 쓰러져서 실패
+  r.attackCooldown -= dt;
+  if (r.attackCooldown <= 0) {
+    r.attackCooldown += RAID_ATTACK_INTERVAL;
+    r.godHp -= r.attack;
+    result.raidEvents.push('strike');
+    if (r.godHp <= 0) {
+      result.raidEvents.push('down');
+      return finishRaid({ ...s, raid: { ...r, godHp: 0 } }, false, result, rng);
+    }
+  }
+
   if (r.id === 'gigantomachy') {
-    // 헤라클레스: 2초마다 화살 → 맞은 거인에게 「필멸의 표식」
+    // 헤라클레스: 6초마다 화살 → 맞은 거인에게 「필멸의 표식」
     r.heraclesCooldown -= dt;
     if (r.heraclesCooldown <= 0) {
       r.heraclesCooldown += HERACLES_INTERVAL;
@@ -622,7 +657,12 @@ function raidTick(state: GameState, dt: number, result: ActionResult, rng: Rng):
     if (r.breathCooldown <= 0) {
       r.breathCooldown += r.enraged ? BREATH_INTERVAL_ENRAGED : BREATH_INTERVAL;
       r.stunLeft = STUN_DURATION;
+      r.godHp -= r.attack * BREATH_DAMAGE;
       result.raidEvents.push('breath');
+      if (r.godHp <= 0) {
+        result.raidEvents.push('down');
+        return finishRaid({ ...s, raid: { ...r, godHp: 0 } }, false, result, rng);
+      }
     }
     s = { ...s, raid: r };
   }
@@ -657,7 +697,7 @@ function hitRaid(state: GameState, hit: Hit, result: ActionResult, rng: Rng): Ga
   if (r.phase + 1 < phases.length) {
     const phase = r.phase + 1;
     if (phases[phase].isBoss) result.raidEvents.push('boss');
-    return { ...state, raid: { ...r, phase, monster: raidMonster(r.id, phase, state.god, r.baseDps) } };
+    return { ...state, raid: { ...r, phase, monster: raidMonster(r.id, phase, state.god, r.stage) } };
   }
   return finishRaid({ ...state, raid: r }, true, result, rng);
 }
@@ -667,7 +707,7 @@ function finishRaid(state: GameState, cleared: boolean, result: ActionResult, rn
   const r = state.raid!;
   const info = RAIDS[r.id];
   const damagePct = Math.min(1, r.totalDamage / r.totalHp);
-  const rate = cleared ? 1 : damagePct * 0.5;
+  const rate = (cleared ? 1 : damagePct * 0.5) * Math.pow(REWARD_GROWTH, r.stage); // 높은 단계일수록 보상도 커진다
   const wave = Math.max(1, state.maxWave);
   const gold = Math.floor(monsterGold(wave, state.levels.gold) * info.goldReward * rate);
   const xp = Math.floor(xpForKill(wave) * info.xpReward * rate);
@@ -679,6 +719,8 @@ function finishRaid(state: GameState, cleared: boolean, result: ActionResult, rn
 
   if (cleared) {
     s.raidClears = { ...s.raidClears, [r.id]: (s.raidClears[r.id] ?? 0) + 1 };
+    // 클리어하면 입장권을 돌려준다 → 입장권은 실패할 때만 줄어든다
+    s.raidTickets = refundTicket(s.raidTickets, r.id);
     if (firstClear && r.id === 'typhoeus') {
       weapon = s.god === 'poseidon' ? 'poseidon_trident' : 'zeus_thunderbolt'; // 자기 신의 초월 무기 확정
     } else {
@@ -693,7 +735,8 @@ function finishRaid(state: GameState, cleared: boolean, result: ActionResult, rn
   }
   s = gainXp(s, xp, result);
 
-  const raidResult: RaidResult = { id: r.id, cleared, damagePct, gold, xp, weapon, unlockedSkill, firstClear };
+  const knockedOut = r.godHp <= 0;
+  const raidResult: RaidResult = { id: r.id, cleared, damagePct, stage: r.stage, knockedOut, gold, xp, weapon, unlockedSkill, firstClear };
   result.raidEvents.push(cleared ? 'clear' : 'fail');
   return { ...s, raidResult };
 }

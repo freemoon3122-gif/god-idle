@@ -1,9 +1,9 @@
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { SKILLS } from '../game/balance';
-import { canEnterRaid, raidUnlocked, ticketsLeft } from '../game/engine';
+import { canEnterRaid, raidStage, raidUnlocked, ticketsLeft } from '../game/engine';
 import { formatNumber } from '../game/format';
-import { GIGANTO_UNLOCK_LEVEL, RAID_LIST, RAIDS, TYPHON_UNLOCK_LEVEL } from '../game/raids';
+import { defenseMultiplier, GIGANTO_UNLOCK_LEVEL, godRaidHp, RAID_LIST, RAIDS, stageMultipliers, TYPHON_UNLOCK_LEVEL } from '../game/raids';
 import { StoryLine } from '../game/story';
 import { GameState, RaidId, RaidResult } from '../game/types';
 import { RARITY_INFO, WEAPONS } from '../game/weapons';
@@ -17,12 +17,15 @@ export function RaidPanel({ state, onEnter }: { state: GameState; onEnter: (id: 
   return (
     <View style={styles.panel}>
       <Text style={styles.sectionTitle}>⚔️ 레이드</Text>
-      <Text style={styles.sectionDesc}>신화 속 전쟁에 참전한다. 보스 체력은 입장할 때의 내 전투력에 맞춰진다.</Text>
+      <Text style={styles.sectionDesc}>
+        신화 속 전쟁에 참전한다. 클리어할 때마다 단계가 올라 적이 기하급수로 강해진다. 입장권은 실패할 때만 쓴다.
+      </Text>
       {RAID_LIST.map((raid) => {
         const unlocked = raidUnlocked(state, raid.id);
         const left = ticketsLeft(state, raid.id, now);
         const enterable = canEnterRaid(state, raid.id, now);
-        const clears = state.raidClears[raid.id] ?? 0;
+        const stage = raidStage(state, raid.id);
+        const m = stageMultipliers(raid.id, stage);
         const lockText =
           raid.id === 'gigantomachy'
             ? `🔒 Lv.${GIGANTO_UNLOCK_LEVEL}에 신이 되면 열려요`
@@ -35,7 +38,7 @@ export function RaidPanel({ state, onEnter }: { state: GameState; onEnter: (id: 
                 <Text style={styles.raidName}>{raid.name}</Text>
                 <Text style={styles.raidSub}>{raid.subtitle}</Text>
               </View>
-              {clears > 0 && <Text style={styles.clears}>클리어 {clears}회</Text>}
+              <Text style={styles.clears}>{stage}단계</Text>
             </View>
             {raid.gimmicks.map((g) => (
               <Text key={g} style={styles.gimmick}>
@@ -45,6 +48,16 @@ export function RaidPanel({ state, onEnter }: { state: GameState; onEnter: (id: 
             <Text style={styles.gimmick}>
               · 제한 시간 {raid.timeLimit / 1000}초 · 실패해도 넣은 피해만큼 보상
             </Text>
+            {unlocked && (
+              <View style={styles.stats}>
+                <Text style={styles.stat}>❤️ 체력 ×{formatNumber(m.hp)}</Text>
+                <Text style={styles.stat}>⚔️ 공격력 {formatNumber(m.attack)}</Text>
+                <Text style={styles.stat}>
+                  🛡️ 방어력 {formatNumber(m.defense)} (피해 {Math.round(defenseMultiplier(m.defense) * 100)}%)
+                </Text>
+                <Text style={[styles.stat, { color: colors.xp }]}>💙 내 신의 체력 {formatNumber(godRaidHp(state.level))}</Text>
+              </View>
+            )}
             {unlocked ? (
               <View style={styles.enterRow}>
                 <Text style={styles.tickets}>
@@ -110,8 +123,10 @@ export function RaidResultModal({ result, onClose }: { result: RaidResult | null
           <View style={styles.resultCard}>
             <Text style={styles.resultEmoji}>{result.cleared ? '🏆' : '🏳️'}</Text>
             <Text style={styles.resultTitle}>
-              {RAIDS[result.id].name} {result.cleared ? '클리어!' : '실패'}
+              {RAIDS[result.id].name} {result.stage}단계 {result.cleared ? '클리어!' : '실패'}
             </Text>
+            {result.cleared && <Text style={styles.resultBody}>다음 단계({result.stage + 1}단계)부터 적이 더 강해져요. 입장권은 돌려받았어요.</Text>}
+            {result.knockedOut && <Text style={[styles.resultBody, { color: colors.hp }]}>신이 쓰러졌다... 레벨을 올려 체력을 키우거나 더 빨리 쓰러뜨려야 해요.</Text>}
             {result.firstClear && <Text style={styles.firstClear}>✨ 첫 클리어 보상 ✨</Text>}
             {!result.cleared && (
               <Text style={styles.resultBody}>넣은 피해 {Math.floor(result.damagePct * 100)}% → 보상의 일부를 받았어요.</Text>
@@ -150,7 +165,9 @@ const styles = StyleSheet.create({
   raidEmoji: { fontSize: 30 },
   raidName: { color: colors.text, fontSize: 16, fontWeight: '900' },
   raidSub: { color: colors.subText, fontSize: 12 },
-  clears: { color: colors.gold, fontSize: 12, fontWeight: '800' },
+  clears: { color: colors.gold, fontSize: 14, fontWeight: '900' },
+  stats: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6 },
+  stat: { color: colors.text, fontSize: 12, fontWeight: '700', backgroundColor: colors.panel, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4, overflow: 'hidden' },
   gimmick: { color: colors.subText, fontSize: 12, lineHeight: 17 },
   enterRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 },
   tickets: { color: colors.text, fontWeight: '800', fontSize: 13 },

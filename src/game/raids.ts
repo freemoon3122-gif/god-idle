@@ -1,3 +1,4 @@
+import { monsterHp } from './balance';
 import { GodId, RaidId, SkillId } from './types';
 import { Rarity } from './weapons';
 
@@ -16,7 +17,7 @@ import { Rarity } from './weapons';
 export interface RaidPhase {
   kind: string; // 스프라이트
   name: string;
-  hpSeconds: number; // 체력 = 입장 시 전투력(초당 피해) × 이 값
+  hpScale: number; // 체력 = 그 단계의 기준 체력(같은 웨이브 일반 몬스터 체력) × 이 값
   isBoss: boolean;
 }
 
@@ -51,6 +52,7 @@ export const RAIDS: Record<RaidId, RaidInfo> = {
       '불사의 거인: 평소에는 피해가 절반만 들어간다',
       '헤라클레스가 6초마다 화살을 쏜다 → 3초간 「필멸의 표식」: 피해 1.5배',
       '첫 클리어: 제우스 「거인 사냥」 / 포세이돈 「니시로스 투척」',
+      '클리어할 때마다 단계가 올라 거인의 체력·공격력·방어력이 기하급수로 오른다',
     ],
   },
   typhoeus: {
@@ -71,6 +73,7 @@ export const RAIDS: Record<RaidId, RaidInfo> = {
       '헤르메스와 판이 힘줄을 되찾아 오면 10초간 공격력 1.5배',
       '불길 브레스에 맞으면 1초간 기절 (체력 25% 이하에서 분노해 더 자주)',
       '첫 클리어: 자기 신의 초월 무기 확정',
+      '클리어할 때마다 단계가 올라 체력·공격력·방어력이 기하급수로 오른다',
     ],
   },
 };
@@ -101,14 +104,71 @@ export const STUN_DURATION = 1_200;
 export function raidPhases(id: RaidId, god: GodId | null): RaidPhase[] {
   if (id === 'gigantomachy') {
     return [
-      { kind: 'giant_spear', name: '기간테스 전사', hpSeconds: 16, isBoss: false },
-      { kind: 'giant_rock', name: '기간테스 투석병', hpSeconds: 16, isBoss: false },
+      { kind: 'giant_spear', name: '기간테스 전사', hpScale: 15, isBoss: false },
+      { kind: 'giant_rock', name: '기간테스 투석병', hpScale: 15, isBoss: false },
       god === 'poseidon'
-        ? { kind: 'polybotes', name: '바다의 거인 폴리보테스', hpSeconds: 95, isBoss: true }
-        : { kind: 'porphyrion', name: '거인의 왕 포르피리온', hpSeconds: 95, isBoss: true },
+        ? { kind: 'polybotes', name: '바다의 거인 폴리보테스', hpScale: 70, isBoss: true }
+        : { kind: 'porphyrion', name: '거인의 왕 포르피리온', hpScale: 70, isBoss: true },
     ];
   }
-  return [{ kind: 'typhoeus', name: '티포에우스', hpSeconds: 160, isBoss: true }];
+  return [{ kind: 'typhoeus', name: '티포에우스', hpScale: 50, isBoss: true }];
+}
+
+// ───────────── 레이드 단계: 클리어할 때마다 한 단계씩 올라가고, 적이 기하급수로 강해진다 ─────────────
+//
+// 단계 n의 능력치 (모두 지수 함수 = 기하급수)
+//   체력   = 기준 웨이브 + n × STAGE_WAVE_STEP 웨이브의 몬스터 체력 × 페이즈 배율
+//            → 몬스터 체력이 웨이브마다 1.18배이므로 한 단계에 1.18^8 ≈ 3.8배
+//   방어력 = 20 × (1.5^n − 1)               → 받는 피해 × 100 / (100 + 방어력)
+//   공격력 = 기본값 × 1.45^n                 → 3초마다 신의 체력을 깎는다
+// 입장권은 실패할 때만 쓴다 (클리어하면 돌려준다) → 쉬운 단계는 한 번에 쭉 올라가고, 막히는 단계에서 하루 3번 도전.
+// 신의 체력은 레벨이 오를수록 늘어난다 (100 × 1.5^((레벨−200)/100)) → 성장하면 다시 따라잡을 수 있다.
+
+export const STAGE_WAVE_STEP = 8;
+const ANCHOR_WAVE: Record<RaidId, number> = { gigantomachy: 350, typhoeus: 510 }; // 단계 0의 기준 웨이브
+const BASE_ATTACK: Record<RaidId, number> = { gigantomachy: 3, typhoeus: 4 };
+export const ATTACK_GROWTH = 1.45;
+export const DEFENSE_BASE = 20;
+export const DEFENSE_GROWTH = 1.5;
+export const RAID_ATTACK_INTERVAL = 3_000;
+export const BREATH_DAMAGE = 3; // 브레스는 공격력의 3배
+export const REWARD_GROWTH = 1.4; // 단계가 오를수록 골드·경험치 보상도 1.4배씩
+
+/** 단계의 기준 체력: 기준 웨이브의 "일반 몬스터" 체력 (보스 웨이브 6배는 빼고) */
+function stageBaseHp(id: RaidId, stage: number): number {
+  const wave = ANCHOR_WAVE[id] + stage * STAGE_WAVE_STEP;
+  return monsterHp(wave % 10 === 0 ? wave + 1 : wave);
+}
+
+export function raidPhaseHp(id: RaidId, stage: number, phase: RaidPhase): number {
+  return Math.ceil(stageBaseHp(id, stage) * phase.hpScale);
+}
+
+export function raidDefense(stage: number): number {
+  return DEFENSE_BASE * (Math.pow(DEFENSE_GROWTH, stage) - 1);
+}
+
+/** 방어력이 피해를 얼마나 남기는지 (방어력 0 → 1, 100 → 0.5, 900 → 0.1) */
+export function defenseMultiplier(defense: number): number {
+  return 100 / (100 + defense);
+}
+
+export function raidAttack(id: RaidId, stage: number): number {
+  return BASE_ATTACK[id] * Math.pow(ATTACK_GROWTH, stage);
+}
+
+/** 레이드에서 신의 체력: Lv.200 = 100, Lv.500 ≈ 337, Lv.1000 ≈ 2,560 */
+export function godRaidHp(level: number): number {
+  return Math.round(100 * Math.pow(1.5, Math.max(0, level - 200) / 100));
+}
+
+/** UI용: 단계 n의 적 능력치를 단계 0과 비교한 배율 */
+export function stageMultipliers(id: RaidId, stage: number) {
+  return {
+    hp: stageBaseHp(id, stage) / stageBaseHp(id, 0),
+    attack: raidAttack(id, stage),
+    defense: raidDefense(stage),
+  };
 }
 
 /** 기간토마키아 첫 클리어로 얻는 신별 스킬 */

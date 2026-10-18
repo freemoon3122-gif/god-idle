@@ -20,7 +20,7 @@ export type SkillId =
 export type RaidId = 'gigantomachy' | 'typhoeus';
 
 /** 레이드 중 일어나는 일. 화면에서 컷신·연출을 띄우는 데 쓴다. */
-export type RaidEvent = 'intro' | 'boss' | 'tendon' | 'hermes' | 'enrage' | 'breath' | 'clear' | 'fail';
+export type RaidEvent = 'intro' | 'boss' | 'tendon' | 'hermes' | 'enrage' | 'breath' | 'strike' | 'down' | 'clear' | 'fail';
 
 /** 성장 단계: 아기(1~99) → 청소년(100~199) → 신(200~) */
 export type Form = 'baby' | 'teen' | 'god';
@@ -54,7 +54,12 @@ export interface RaidState {
   phase: number; // 몇 번째 적인지 (0부터)
   monster: Monster;
   timeLeft: number; // 제한 시간 (ms)
-  baseDps: number; // 입장할 때의 전투력. 보스 체력을 이 값에 맞춘다
+  stage: number; // 레이드 단계 (= 지금까지 클리어한 횟수). 높을수록 적의 체력·공격력·방어력이 기하급수로 오른다
+  defense: number; // 적의 방어력. 받는 피해 × 100 / (100 + 방어력)
+  attack: number; // 적의 공격력. 3초마다 신의 체력을 이만큼 깎는다
+  attackCooldown: number;
+  godHp: number; // 레이드 안에서만 쓰는 신의 체력. 0이 되면 쓰러져서 실패
+  godMaxHp: number;
   totalHp: number; // 모든 적의 체력 합 (실패 시 보상 비율 계산용)
   totalDamage: number;
   // 기간토마키아: 헤라클레스의 화살 → 필멸의 표식
@@ -73,6 +78,8 @@ export interface RaidResult {
   id: RaidId;
   cleared: boolean;
   damagePct: number; // 넣은 피해 비율 (0~1)
+  stage: number; // 도전한 단계
+  knockedOut: boolean; // 신이 쓰러져서 실패했는지
   gold: number;
   xp: number;
   weapon: WeaponId | null;

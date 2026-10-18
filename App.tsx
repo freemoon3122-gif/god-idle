@@ -72,9 +72,10 @@ export default function App() {
     setGame(r.state);
     battleRef.current?.play(r); // 타격·스킬·무기 획득 연출
     if (r.evolvedTo === 'teen') setEvolved(true);
-    // 레이드 이벤트(입장, 보스 등장, 힘줄 절단...)에 맞는 컷신 대사를 모은다
+    // 레이드 이벤트(입장, 보스 등장, 힘줄 절단...)에 맞는 컷신 대사를 모은다. 이야기는 처음(0단계) 도전할 때만 보여 준다.
     const raidId = r.state.raid?.id ?? r.state.raidResult?.id;
-    if (raidId && r.raidEvents.length) {
+    const stage = r.state.raid?.stage ?? r.state.raidResult?.stage ?? 0;
+    if (raidId && stage === 0 && r.raidEvents.length) {
       const lines = r.raidEvents.flatMap((ev) => storyFor(ev, raidId, r.state.god) ?? []);
       if (lines.length) {
         storyRef.current = true;
