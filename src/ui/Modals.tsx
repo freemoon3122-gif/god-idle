@@ -48,7 +48,7 @@ export function EvolveModal({ visible, onClose }: { visible: boolean; onClose: (
   return (
     <Popup visible={visible}>
       <View style={styles.spriteBox}>
-        <PixelSprite name="teen" scale={8} />
+        <PixelSprite name="teen" scale={6} />
       </View>
       <Text style={styles.title}>청소년 신으로 성장했다!</Text>
       <Text style={styles.body}>공격력이 1.5배가 되었어요.{'\n'}Lv.200이 되면 진짜 신이 될 수 있어요.</Text>
@@ -73,7 +73,7 @@ export function GodChoiceModal({ visible, onChoose }: { visible: boolean; onChoo
               accessibilityRole="button"
               style={({ pressed }) => [styles.god, pressed && { borderColor: colors.gold }]}
             >
-              <PixelSprite name={id} scale={5} />
+              <PixelSprite name={id} scale={4} />
               <Text style={styles.godName}>
                 {god.emoji} {god.name}
               </Text>

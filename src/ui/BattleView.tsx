@@ -8,15 +8,15 @@ import { RARITY_INFO, WEAPONS } from '../game/weapons';
 import Svg, { Circle, Defs, RadialGradient, Stop } from 'react-native-svg';
 
 import { Effect, EffectSpec, EffectView } from './effects';
-import { PixelSprite } from './PixelSprite';
-import { heroSprite, skyColors, SPRITES } from './sprites';
+import { PixelSprite, spriteSize } from './PixelSprite';
+import { heroSprite, skyColors } from './sprites';
 import { colors } from './theme';
 
 const ND = Platform.OS !== 'web';
 const HEIGHT = 330;
 const GROUND = 34; // 바닥 높이
 const SIDE = 26; // 좌우 여백
-const HERO_SCALE = 6;
+const HERO_SCALE = 4; // 신 스프라이트는 약 24×26칸 → 약 100pt
 const MAX_EFFECTS = 70;
 
 /** 부모(App)가 전투 결과를 넘겨 연출을 재생하게 하는 통로 */
@@ -30,10 +30,6 @@ interface Props {
   onChallengeBoss: () => void;
 }
 
-function spriteSize(name: string, scale: number) {
-  const rows = SPRITES[name] ?? [];
-  return { w: Math.max(...rows.map((r) => r.length)) * scale, h: rows.length * scale };
-}
 
 /**
  * 전투 화면. 손맛을 내는 연출 요소:
@@ -64,7 +60,7 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
 
   const hero = heroSprite(state);
   const heroSize = spriteSize(hero, HERO_SCALE);
-  const monsterScale = state.monster.isBoss ? 9 : 6;
+  const monsterScale = state.monster.isBoss ? 6 : 4;
   const monsterSize = spriteSize(state.monster.kind, monsterScale);
 
   // 좌표 계산 (전투 영역 기준)
