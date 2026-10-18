@@ -107,6 +107,54 @@ def teen():
     return c.rows()
 
 
+def adult():
+    """성인 신: 붉은 깃 장식의 청동 투구, 붉은 망토, 청동 가슴갑옷, 둥근 방패와 긴 검"""
+    c = Canvas(34, 31)
+    # 투구 깃 장식 (붉은 말총)
+    c.text(0, 9, 'RRRRRRRR')
+    c.text(1, 7, 'RrrrrrrrrrRR')
+    c.text(2, 13, 'RR')
+    # 청동 투구
+    c.text(2, 6, 'YYYYYYY')
+    c.text(3, 5, 'YyyyyyyyyyyyY')
+    c.text(4, 4, 'YyyYYYYYYYYyyY')
+    c.text(5, 4, 'Yy' + 'hssssssssh' + 'yY')
+    c.text(6, 4, 'Yy' + 'sbbsssssbb' + 'yY')
+    c.text(7, 4, 'Yy' + 'sbwsssssbw' + 'yY')
+    c.text(8, 4, 'Y' + 'ys' + 'sssssdsss' + 'syY'[:2] + 'Y')
+    c.text(9, 5, 'y' + 'ssssnnssss' + 'y')
+    c.text(10, 6, 'Y' + 'dssssssd' + 'Y')
+    # 망토(뒤) + 어깨
+    c.text(11, 3, 'RRyyyyy' + 'ssss' + 'yyyyyRR')
+    c.text(12, 2, 'RRyYyy' + 'yyyyyyyy' + 'yyYyRR')
+    # 가슴갑옷 (청동) + 팔
+    c.text(13, 2, 'RRss' + 'YyyyyyyyyyY' + 'ssRR')
+    c.text(14, 2, 'RRss' + 'yYyyyyyyyYy' + 'ssR')
+    c.text(15, 2, 'RR.' + 's' + 'yyYyyyyyYyy' + 's.R')
+    c.text(16, 2, 'RR..' + 'yyyYYYYYyyy' + '..R')
+    c.text(17, 2, 'RR..' + 'ooooooooooo' + '..R')
+    # 치마 갑옷 (가죽 띠)
+    c.text(18, 2, 'RR..' + 'wowwowwowwo' + '..R')
+    c.text(19, 2, 'RR..' + 'owwowwowwow' + '..R')
+    c.text(20, 3, 'R...' + 'ss.....ss')
+    c.text(21, 7, 'ss.....ss')
+    c.text(22, 7, 'YY.....YY')
+    c.text(23, 6, 'YYY.....YYY')
+    # 둥근 방패 (왼팔)
+    shield = ['..YYYY..', '.YyyyyY.', 'YyyRRyyY', 'YyRRRRyY', 'YyRRRRyY', 'YyyRRyyY', '.YyyyyY.', '..YYYY..']
+    c.block(12, 0, shield)
+    # 긴 검: 오른손(15, 19)에서 오른쪽 위로
+    for k in range(13):
+        c.put(13 - k, 21 + k, 'q')
+        c.put(14 - k, 21 + k, 'Q')
+    c.put(0, 33, 'w')
+    c.text(13, 19, 'YY')
+    c.text(14, 20, 'Y')
+    c.put(15, 20, 'o')
+    c.put(16, 19, 'y')
+    return c.rows()
+
+
 def zeus():
     c = Canvas(30, 28)
     # 왕관
@@ -201,7 +249,7 @@ def poseidon():
     return c.rows()
 
 
-sprites = {'baby': baby(), 'teen': teen(), 'zeus': zeus(), 'poseidon': poseidon()}
+sprites = {'baby': baby(), 'teen': teen(), 'adult': adult(), 'zeus': zeus(), 'poseidon': poseidon()}
 json.dump(sprites, open('heroes.json', 'w'), ensure_ascii=False, indent=1)
 for k, v in sprites.items():
     print(k, len(v[0]), 'x', len(v))

@@ -80,8 +80,8 @@ export const RAIDS: Record<RaidId, RaidInfo> = {
 
 export const RAID_LIST: RaidInfo[] = Object.values(RAIDS);
 
-export const GIGANTO_UNLOCK_LEVEL = 200;
-export const TYPHON_UNLOCK_LEVEL = 500;
+export const GIGANTO_UNLOCK_LEVEL = 3000; // 신이 되는 레벨
+export const TYPHON_UNLOCK_LEVEL = 5000;
 
 // 기간토마키아 기믹
 export const IMMORTAL_MULTIPLIER = 0.5;
@@ -122,7 +122,7 @@ export function raidPhases(id: RaidId, god: GodId | null): RaidPhase[] {
 //   방어력 = 20 × (1.5^n − 1)               → 받는 피해 × 100 / (100 + 방어력)
 //   공격력 = 기본값 × 1.45^n                 → 3초마다 신의 체력을 깎는다
 // 입장권은 실패할 때만 쓴다 (클리어하면 돌려준다) → 쉬운 단계는 한 번에 쭉 올라가고, 막히는 단계에서 하루 3번 도전.
-// 신의 체력은 레벨이 오를수록 늘어난다 (100 × 1.5^((레벨−200)/100)) → 성장하면 다시 따라잡을 수 있다.
+// 신의 체력은 레벨이 오를수록 늘어난다 (100 × 1.5^((레벨−3000)/1000)) → 성장하면 다시 따라잡을 수 있다.
 
 export const STAGE_WAVE_STEP = 8;
 const ANCHOR_WAVE: Record<RaidId, number> = { gigantomachy: 350, typhoeus: 510 }; // 단계 0의 기준 웨이브
@@ -157,9 +157,9 @@ export function raidAttack(id: RaidId, stage: number): number {
   return BASE_ATTACK[id] * Math.pow(ATTACK_GROWTH, stage);
 }
 
-/** 레이드에서 신의 체력: Lv.200 = 100, Lv.500 ≈ 337, Lv.1000 ≈ 2,560 */
+/** 레이드에서 신의 체력: Lv.3000 = 100, Lv.5000 ≈ 225, Lv.10000 ≈ 1,700 */
 export function godRaidHp(level: number): number {
-  return Math.round(100 * Math.pow(1.5, Math.max(0, level - 200) / 100));
+  return Math.round(100 * Math.pow(1.5, Math.max(0, level - 3000) / 1000));
 }
 
 /** UI용: 단계 n의 적 능력치를 단계 0과 비교한 배율 */

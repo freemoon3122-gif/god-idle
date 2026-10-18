@@ -1,6 +1,6 @@
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { GODS, SKILLS } from '../game/balance';
+import { GOD_LEVEL, GODS, SKILLS } from '../game/balance';
 import { OfflineReward } from '../game/engine';
 import { formatNumber } from '../game/format';
 import { GodId } from '../game/types';
@@ -45,20 +45,29 @@ export function OfflineModal({ reward, onClose }: { reward: OfflineReward | null
   );
 }
 
-export function EvolveModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+const EVOLVE_TEXT = {
+  teen: { title: '청소년 신으로 성장했다!', body: '검을 들고 「삼연참」을 쓸 수 있어요.\n공격력이 1.5배가 되었어요.' },
+  adult: { title: '성인 신으로 성장했다!', body: `방패와 긴 검으로 「회오리 검무」를 쓸 수 있어요.\n공격력이 2배가 되었어요.\nLv.${GOD_LEVEL}이 되면 진짜 신이 될 수 있어요.` },
+};
+
+export function EvolveModal({ form, onClose }: { form: 'teen' | 'adult' | null; onClose: () => void }) {
   return (
-    <Popup visible={visible}>
-      <View style={styles.spriteBox}>
-        <PixelSprite name="teen" scale={6} />
-      </View>
-      <Text style={styles.title}>청소년 신으로 성장했다!</Text>
-      <Text style={styles.body}>공격력이 1.5배가 되었어요.{'\n'}Lv.200이 되면 진짜 신이 될 수 있어요.</Text>
-      <Button title="좋아!" onPress={onClose} />
+    <Popup visible={!!form}>
+      {form && (
+        <>
+          <View style={styles.spriteBox}>
+            <PixelSprite name={form} scale={form === 'adult' ? 5 : 6} />
+          </View>
+          <Text style={styles.title}>{EVOLVE_TEXT[form].title}</Text>
+          <Text style={styles.body}>{EVOLVE_TEXT[form].body}</Text>
+          <Button title="좋아!" onPress={onClose} />
+        </>
+      )}
     </Popup>
   );
 }
 
-/** Lv.200 도달 시 신을 고르는 창. 고르기 전에는 닫을 수 없다. */
+/** Lv.3000 도달 시 신을 고르는 창. 고르기 전에는 닫을 수 없다. */
 export function GodChoiceModal({ visible, onChoose }: { visible: boolean; onChoose: (god: GodId) => void }) {
   return (
     <Popup visible={visible}>
@@ -85,6 +94,11 @@ export function GodChoiceModal({ visible, onChoose }: { visible: boolean; onChoo
                   {SKILLS[sid].emoji} {SKILLS[sid].name}
                 </Text>
               ))}
+              {/* 나중에 열리는 스킬은 한 줄로 */}
+              <Text style={[styles.godSkill, { color: colors.subText, fontSize: 11, textAlign: 'center' }]}>
+                + {god.extraSkills.map(([sid]) => SKILLS[sid].emoji).join(' ')}
+                {'\n'}Lv.{god.extraSkills[0][1]}~{god.extraSkills[god.extraSkills.length - 1][1]}에 열림
+              </Text>
             </Pressable>
           );
         })}

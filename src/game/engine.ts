@@ -2,14 +2,15 @@ import {
   baseAttacksPerSecond,
   baseCritChance,
   BOSS_TIME_LIMIT,
+  MAX_TIME_BONUS,
   CRIT_MULTIPLIER,
   findUpgrade,
   FORM_INFO,
   formOf,
   GOD_LEVEL,
+  LEVEL_SCALE,
   GODS,
   isBossWave,
-  KRAKEN_BOSS_TIME_BONUS,
   levelMultiplier,
   monsterGold,
   monsterHp,
@@ -21,7 +22,6 @@ import {
   ULTIMATE_LEVEL,
   upgradeCost,
   upgradeDamage,
-  WAVE_BOSS_TIME_BONUS,
   xpForKill,
   xpToNext,
 } from './balance';
@@ -60,7 +60,8 @@ import { FUSE_COST, nextRarity, randomWeaponOf, Rarity, rollWeaponDrop, WEAPON_L
 
 export type Rng = () => number;
 
-export const SAVE_VERSION = 1;
+/** 2: 레벨을 10배로 늘림 (아기 1~999, 청소년 1000~, 성인 2000~, 신 3000~) */
+export const SAVE_VERSION = 2;
 
 /*
  * 게임 규칙. UI가 없는 순수 함수들이라 Node에서 그대로 테스트할 수 있다.
@@ -82,6 +83,7 @@ export function newGame(now: number): GameState {
     levels: { damage: 0, speed: 0, crit: 0, gold: 0 },
     monster: spawnMonster(1),
     bossTimeLeft: null,
+    bossBonusLeft: MAX_TIME_BONUS,
     farming: false,
     attackCooldown: 0,
     skillCooldowns: {},
@@ -105,9 +107,15 @@ export function newGame(now: number): GameState {
  * 필드를 추가할 때마다 여기에 기본값을 넣으면 기존 플레이어의 진행이 날아가지 않는다.
  */
 export function migrate(saved: GameState): GameState {
+  // 버전 1 저장: 레벨을 10배로 바꾼다. 이미 신이었다면 최소 Lv.3000 (신이 되는 레벨)
+  if ((saved.version ?? 1) < 2) {
+    const level = Math.max(saved.level * LEVEL_SCALE, saved.god ? GOD_LEVEL : 1);
+    saved = { ...saved, version: SAVE_VERSION, level, xp: 0 };
+  }
   return {
     ...saved,
     queuedHits: saved.queuedHits ?? [],
+    bossBonusLeft: saved.bossBonusLeft ?? MAX_TIME_BONUS,
     weapons: saved.weapons ?? {},
     weaponEnhance: saved.weaponEnhance ?? {},
     equippedWeapon: saved.equippedWeapon ?? null,
@@ -143,15 +151,19 @@ export function ownedPower(s: GameState, id: WeaponId): number {
   return weaponPower(id, s.weaponEnhance[id] ?? 0, s.god);
 }
 
-/** 지금 쓸 수 있는 스킬 목록: 청소년 → 삼연참, 신 → 스킬 2개 (+ Lv.1000 궁극기) */
+/** 지금 쓸 수 있는 스킬 (화면 순서대로: 기본 → 레벨로 열린 스킬 → 레이드 보상 → 궁극기) */
 export function availableSkills(s: GameState): SkillId[] {
   if (s.god) {
     const god = GODS[s.god];
-    const base = s.level >= ULTIMATE_LEVEL ? [...god.skills, god.ultimate] : [...god.skills];
+    const list: SkillId[] = [...god.skills, ...god.extraSkills.filter(([, lv]) => s.level >= lv).map(([id]) => id)];
     const reward = gigantoRewardSkill(s.god);
-    return reward && s.unlockedSkills.includes(reward) ? [...base, reward] : base;
+    if (reward && s.unlockedSkills.includes(reward)) list.push(reward);
+    if (s.level >= ULTIMATE_LEVEL) list.push(god.ultimate);
+    return list;
   }
-  return formOf(s.level) === 'teen' ? ['teen_slash'] : [];
+  const form = formOf(s.level);
+  if (form === 'adult') return ['teen_slash', 'adult_whirl'];
+  return form === 'teen' ? ['teen_slash'] : [];
 }
 
 export function attacksPerSecond(s: GameState, includeBuff = true): number {
@@ -251,9 +263,24 @@ export function castSkill(state: GameState, id: SkillId, rng: Rng = Math.random)
   result.casts.push(id);
 
   if (skill.buffDuration) s.buff = { skill: id, timeLeft: skill.buffDuration };
-  const timeBonus = id === 'poseidon_wave' ? WAVE_BOSS_TIME_BONUS : id === 'poseidon_kraken' ? KRAKEN_BOSS_TIME_BONUS : 0;
-  if (timeBonus && s.raid) s.raid = { ...s.raid, timeLeft: s.raid.timeLeft + timeBonus };
-  else if (timeBonus && s.bossTimeLeft !== null) s.bossTimeLeft += timeBonus;
+  // 다른 스킬 쿨타임 초기화(신들의 왕) / 절반(바다의 축복)
+  if (skill.cooldownEffect) {
+    const next: GameState['skillCooldowns'] = { [id]: skill.cooldown };
+    if (skill.cooldownEffect === 'halve') {
+      for (const [other, ms] of Object.entries(state.skillCooldowns) as [SkillId, number][]) if (other !== id) next[other] = ms / 2;
+    }
+    s.skillCooldowns = next;
+  }
+  if (skill.healRatio && s.raid) {
+    s.raid = { ...s.raid, godHp: Math.min(s.raid.godMaxHp, s.raid.godHp + s.raid.godMaxHp * skill.healRatio) };
+  }
+  // 보스 시간 증가: 한 번의 보스전·레이드에서 합쳐서 최대 30초까지만
+  const timeBonus = Math.min(skill.bossTimeBonus ?? 0, s.bossBonusLeft);
+  if (timeBonus > 0 && (s.raid || s.bossTimeLeft !== null)) {
+    s.bossBonusLeft -= timeBonus;
+    if (s.raid) s.raid = { ...s.raid, timeLeft: s.raid.timeLeft + timeBonus };
+    else s.bossTimeLeft! += timeBonus;
+  }
   if (skill.damageMultiplier) {
     // 첫 타는 바로, 나머지는 hitInterval 간격으로 예약 → tick()에서 차례로 들어간다
     const total = skill.hits ?? 1;
@@ -453,7 +480,9 @@ function normalHit(s: GameState, source: Hit['source'], rng: Rng): Hit {
 }
 
 function skillHit(s: GameState, q: QueuedHit, rng: Rng): Hit {
-  const hit = normalHit(s, q.skill, rng);
+  const hit = SKILLS[q.skill].alwaysCrit
+    ? { damage: attackDamage(s) * critMultiplier(s), crit: true, source: q.skill }
+    : normalHit(s, q.skill, rng);
   return { ...hit, damage: hit.damage * q.multiplier, combo: { index: q.index, total: q.total } };
 }
 
@@ -501,6 +530,7 @@ function enterWave(state: GameState, wave: number): GameState {
     maxWave: Math.max(state.maxWave, wave),
     monster: spawnMonster(wave),
     bossTimeLeft: isBossWave(wave) ? BOSS_TIME_LIMIT : null,
+    bossBonusLeft: MAX_TIME_BONUS,
   };
 }
 
@@ -573,6 +603,7 @@ export function startRaid(state: GameState, id: RaidId, now: number): ActionResu
     ...state,
     raid,
     queuedHits: [], // 메인 전투에서 예약된 연타는 버린다
+    bossBonusLeft: MAX_TIME_BONUS,
     raidResult: null,
     raidTickets: { day: today, used: { ...used, [id]: (used[id] ?? 0) + 1 } },
   };
@@ -715,7 +746,7 @@ function finishRaid(state: GameState, cleared: boolean, result: ActionResult, rn
   const firstClear = cleared && !(state.raidClears[r.id] ?? 0);
   let weapon: WeaponId | null = null;
   let unlockedSkill: SkillId | null = null;
-  let s: GameState = { ...state, raid: null, queuedHits: [], gold: state.gold + gold };
+  let s: GameState = { ...state, raid: null, queuedHits: [], bossBonusLeft: MAX_TIME_BONUS, gold: state.gold + gold };
 
   if (cleared) {
     s.raidClears = { ...s.raidClears, [r.id]: (s.raidClears[r.id] ?? 0) + 1 };

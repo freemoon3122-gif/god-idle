@@ -11,6 +11,7 @@ import { Form, GodId, SkillId, UpgradeId } from './types';
 
 export const WAVES_PER_STAGE = 10; // 10번째 몬스터는 보스
 export const BOSS_TIME_LIMIT = 30_000; // 보스전 제한 시간 30초
+export const MAX_TIME_BONUS = 30_000; // 스킬로 늘릴 수 있는 시간은 한 번의 보스전·레이드에서 최대 30초
 export const CRIT_MULTIPLIER = 3;
 export const OFFLINE_CAP_MS = 8 * 60 * 60 * 1000; // 오프라인 보상은 최대 8시간
 export const OFFLINE_EFFICIENCY = 0.5; // 오프라인에서는 골드를 50%만 번다
@@ -19,12 +20,20 @@ export const OFFLINE_XP_EFFICIENCY = 0.1;
 
 // ───────────── 레벨 & 성장 단계 ─────────────
 
-export const TEEN_LEVEL = 100;
-export const GOD_LEVEL = 200;
-export const ULTIMATE_LEVEL = 1000;
+export const TEEN_LEVEL = 1000;
+export const ADULT_LEVEL = 2000;
+export const GOD_LEVEL = 3000;
+export const ULTIMATE_LEVEL = 10000;
+
+/**
+ * 레벨 숫자는 화면에 보이는 값이고, 밸런스 공식은 "레벨 ÷ 10"을 기준으로 계산한다.
+ * (예전에는 Lv.100에 청소년이 됐는데, 레벨을 10배로 늘리면서 성장 속도는 그대로 두려고)
+ */
+export const LEVEL_SCALE = 10;
 
 export function formOf(level: number): Form {
   if (level >= GOD_LEVEL) return 'god';
+  if (level >= ADULT_LEVEL) return 'adult';
   if (level >= TEEN_LEVEL) return 'teen';
   return 'baby';
 }
@@ -32,12 +41,17 @@ export function formOf(level: number): Form {
 export const FORM_INFO: Record<Form, { name: string; multiplier: number }> = {
   baby: { name: '아기 신', multiplier: 1 },
   teen: { name: '청소년 신', multiplier: 1.5 },
+  adult: { name: '성인 신', multiplier: 2 },
   god: { name: '신', multiplier: 2.5 },
 };
 
-/** 다음 레벨까지 필요한 경험치 */
+/**
+ * 다음 레벨까지 필요한 경험치.
+ * 예전 공식(5 + 레벨^1.6)을 "레벨 ÷ 10"에 적용하고 10으로 나눴다 → 같은 경험치로 레벨이 10배 오른다.
+ */
 export function xpToNext(level: number): number {
-  return Math.ceil(5 + Math.pow(level, 1.6));
+  const l = level / LEVEL_SCALE;
+  return Math.ceil((5 + Math.pow(l, 1.6)) / LEVEL_SCALE);
 }
 
 export function xpForKill(wave: number): number {
@@ -45,9 +59,9 @@ export function xpForKill(wave: number): number {
   return Math.ceil(isBossWave(wave) ? base * 5 : base);
 }
 
-/** 레벨이 오를수록 기본 공격력이 조금씩 오른다 (Lv.1 = 1배, Lv.200 ≈ 9배) */
+/** 레벨이 오를수록 기본 공격력이 조금씩 오른다 (Lv.10 = 1배, Lv.1000 ≈ 5배, Lv.3000 ≈ 13배) */
 export function levelMultiplier(level: number): number {
-  return 1 + (level - 1) * 0.04;
+  return 1 + Math.max(0, level / LEVEL_SCALE - 1) * 0.04;
 }
 
 // ───────────── 몬스터 ─────────────
@@ -106,8 +120,9 @@ export interface GodInfo {
   title: string;
   emoji: string;
   passive: string;
-  skills: SkillId[];
-  ultimate: SkillId; // Lv.1000에 열리는 궁극기
+  skills: SkillId[]; // 신이 되자마자 쓰는 스킬
+  extraSkills: [SkillId, number][]; // [스킬, 열리는 레벨]
+  ultimate: SkillId; // Lv.10000에 열리는 궁극기
 }
 
 export const GODS: Record<GodId, GodInfo> = {
@@ -118,6 +133,11 @@ export const GODS: Record<GodId, GodInfo> = {
     emoji: '⚡',
     passive: '공격 속도 +30%',
     skills: ['zeus_bolt', 'zeus_storm'],
+    extraSkills: [
+      ['zeus_chain', 4000],
+      ['zeus_eagle', 6000],
+      ['zeus_king', 8000],
+    ],
     ultimate: 'zeus_judgment',
   },
   poseidon: {
@@ -127,6 +147,11 @@ export const GODS: Record<GodId, GodInfo> = {
     emoji: '🔱',
     passive: '치명타 확률 +15%, 치명타 피해 4배',
     skills: ['poseidon_wave', 'poseidon_trident'],
+    extraSkills: [
+      ['poseidon_maelstrom', 4000],
+      ['poseidon_quake', 6000],
+      ['poseidon_blessing', 8000],
+    ],
     ultimate: 'poseidon_kraken',
   },
 };
@@ -145,6 +170,14 @@ export interface SkillInfo {
   hitInterval?: number;
   /** 지속 효과 시간 (ms) */
   buffDuration?: number;
+  /** 무조건 치명타 */
+  alwaysCrit?: boolean;
+  /** 보스(레이드) 제한 시간 증가 (ms) */
+  bossTimeBonus?: number;
+  /** 다른 스킬의 쿨타임: reset = 바로 초기화, halve = 절반으로 */
+  cooldownEffect?: 'reset' | 'halve';
+  /** 레이드 중 신의 체력 회복 (최대 체력 대비 비율) */
+  healRatio?: number;
 }
 
 export const SKILLS: Record<SkillId, SkillInfo> = {
@@ -157,6 +190,16 @@ export const SKILLS: Record<SkillId, SkillInfo> = {
     damageMultiplier: 6,
     hits: 3,
     hitInterval: 160,
+  },
+  adult_whirl: {
+    id: 'adult_whirl',
+    name: '회오리 검무',
+    emoji: '🌪️',
+    description: '검을 휘돌려 회오리를 일으킨다. 4번, 매번 공격력의 8배',
+    cooldown: 10_000,
+    damageMultiplier: 8,
+    hits: 4,
+    hitInterval: 130,
   },
   zeus_bolt: {
     id: 'zeus_bolt',
@@ -173,6 +216,33 @@ export const SKILLS: Record<SkillId, SkillInfo> = {
     description: '10초 동안 공격 속도 3배',
     cooldown: 40_000,
     buffDuration: 10_000,
+  },
+  zeus_chain: {
+    id: 'zeus_chain',
+    name: '연쇄 번개',
+    emoji: '⛓️',
+    description: '번개가 튕기며 5번 이어진다. 매번 공격력의 10배',
+    cooldown: 15_000,
+    damageMultiplier: 10,
+    hits: 5,
+    hitInterval: 90,
+  },
+  zeus_eagle: {
+    id: 'zeus_eagle',
+    name: '독수리 강하',
+    emoji: '🦅',
+    description: '제우스의 독수리 아이토스가 내리꽂힌다. 공격력의 45배, 무조건 치명타',
+    cooldown: 20_000,
+    damageMultiplier: 45,
+    alwaysCrit: true,
+  },
+  zeus_king: {
+    id: 'zeus_king',
+    name: '신들의 왕',
+    emoji: '👑',
+    description: '왕의 권능으로 다른 스킬의 쿨타임을 모두 초기화한다',
+    cooldown: 90_000,
+    cooldownEffect: 'reset',
   },
   zeus_judgment: {
     id: 'zeus_judgment',
@@ -191,6 +261,7 @@ export const SKILLS: Record<SkillId, SkillInfo> = {
     description: '공격력의 20배 피해 + 보스 제한 시간 5초 증가',
     cooldown: 8_000,
     damageMultiplier: 20,
+    bossTimeBonus: 5_000,
   },
   poseidon_trident: {
     id: 'poseidon_trident',
@@ -199,6 +270,34 @@ export const SKILLS: Record<SkillId, SkillInfo> = {
     description: '10초 동안 모든 공격이 치명타',
     cooldown: 40_000,
     buffDuration: 10_000,
+  },
+  poseidon_maelstrom: {
+    id: 'poseidon_maelstrom',
+    name: '소용돌이',
+    emoji: '🌀',
+    description: '거대한 소용돌이가 6번 휘감는다. 매번 공격력의 9배',
+    cooldown: 15_000,
+    damageMultiplier: 9,
+    hits: 6,
+    hitInterval: 130,
+  },
+  poseidon_quake: {
+    id: 'poseidon_quake',
+    name: '대지진',
+    emoji: '🌋',
+    description: '「대지를 흔드는 자」의 일격. 공격력의 45배 + 보스 제한 시간 5초 증가',
+    cooldown: 20_000,
+    damageMultiplier: 45,
+    bossTimeBonus: 5_000,
+  },
+  poseidon_blessing: {
+    id: 'poseidon_blessing',
+    name: '바다의 축복',
+    emoji: '🐚',
+    description: '다른 스킬의 쿨타임 절반 + 레이드 중이면 신의 체력 30% 회복',
+    cooldown: 60_000,
+    cooldownEffect: 'halve',
+    healRatio: 0.3,
   },
   poseidon_kraken: {
     id: 'poseidon_kraken',
@@ -209,6 +308,7 @@ export const SKILLS: Record<SkillId, SkillInfo> = {
     damageMultiplier: 20,
     hits: 6,
     hitInterval: 170,
+    bossTimeBonus: 10_000,
   },
   // ───── 레이드 「기간토마키아」 첫 클리어 보상 ─────
   zeus_gigas: {
@@ -231,10 +331,6 @@ export const SKILLS: Record<SkillId, SkillInfo> = {
   },
 };
 
-export const KRAKEN_BOSS_TIME_BONUS = 10_000;
-
-
-export const WAVE_BOSS_TIME_BONUS = 5_000;
 
 // ───────────── 강화 효과 ─────────────
 

@@ -59,7 +59,7 @@ export default function App() {
   const gameRef = useRef<GameState | null>(null);
   const battleRef = useRef<BattleHandle>(null);
   const [offline, setOffline] = useState<OfflineReward | null>(null);
-  const [evolved, setEvolved] = useState(false);
+  const [evolved, setEvolved] = useState<'teen' | 'adult' | null>(null); // 진화 팝업에 보여 줄 단계
   const [buyAmount, setBuyAmount] = useState(1); // 강화 한 번에 몇 단계씩 살지 (×1/×10/×50/×100)
   const scrollRef = useRef<ScrollViewInstance>(null);
   // 레이드 컷신: 보여 줄 대사 목록과 지금 몇 번째 줄인지. 컷신이 떠 있는 동안 게임 시간은 멈춘다.
@@ -71,7 +71,7 @@ export default function App() {
     gameRef.current = r.state;
     setGame(r.state);
     battleRef.current?.play(r); // 타격·스킬·무기 획득 연출
-    if (r.evolvedTo === 'teen') setEvolved(true);
+    if (r.evolvedTo === 'teen' || r.evolvedTo === 'adult') setEvolved(r.evolvedTo);
     // 레이드 이벤트(입장, 보스 등장, 힘줄 절단...)에 맞는 컷신 대사를 모은다. 이야기는 처음(0단계) 도전할 때만 보여 준다.
     const raidId = r.state.raid?.id ?? r.state.raidResult?.id;
     const stage = r.state.raid?.stage ?? r.state.raidResult?.stage ?? 0;
@@ -106,7 +106,7 @@ export default function App() {
       if (reward) {
         const r = applyOfflineReward(state, reward);
         state = r.state;
-        if (r.evolvedTo === 'teen') setEvolved(true);
+        if (r.evolvedTo === 'teen' || r.evolvedTo === 'adult') setEvolved(r.evolvedTo);
         setOffline(reward);
       }
       gameRef.current = { ...state, savedAt: now };
@@ -202,12 +202,12 @@ export default function App() {
         </ScrollView>
 
         <OfflineModal reward={offline} onClose={() => setOffline(null)} />
-        <EvolveModal visible={evolved && !offline} onClose={() => setEvolved(false)} />
+        <EvolveModal form={offline ? null : evolved} onClose={() => setEvolved(null)} />
         <GodChoiceModal
           visible={needsGodChoice(game) && !offline}
           onChoose={(god: GodId) => {
             act((s) => chooseGod(s, god));
-            setEvolved(false);
+            setEvolved(null);
             save();
           }}
         />

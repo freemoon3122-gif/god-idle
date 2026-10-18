@@ -131,6 +131,33 @@ export const SPRITES: Record<string, string[]> = {
     '.....ss....ss...............',
     '....yyy....yyy..............',
   ],
+  // 성인 신: 청동 투구·가슴갑옷, 붉은 망토, 둥근 방패와 긴 검
+  adult: [
+    '.........RRRRRRRR................w',
+    '.......RrrrrrrrrrRR..............q',
+    '......YYYYYYYRR.................qQ',
+    '.....YyyyyyyyyyyyY.............qQ.',
+    '....YyyYYYYYYYYyyY............qQ..',
+    '....YyhsssssssshyY...........qQ...',
+    '....YysbbsssssbbyY..........qQ....',
+    '....YysbwsssssbwyY.........qQ.....',
+    '....YyssssssdssssyY.......qQ......',
+    '.....yssssnnssssy........qQ.......',
+    '......YdssssssdY........qQ........',
+    '...RRyyyyyssssyyyyyRR..qQ.........',
+    '..YYYY..yyyyyyyyyyYyRRqQ..........',
+    '.YyyyyY.yyyyyyyyYssYYqQ...........',
+    'YyyRRyyYyyyyyyyYyssRYQ............',
+    'YyRRRRyYYyyyyyYyys.Ro.............',
+    'YyRRRRyYyYYYYYyyy..y..............',
+    'YyyRRyyYooooooooo..R..............',
+    '.YyyyyY.wwowwowwo..R..............',
+    '..YYYY..wowwowwow..R..............',
+    '...R...ss.....ss..................',
+    '.......ss.....ss..................',
+    '.......YY.....YY..................',
+    '......YYY.....YYY.................',
+  ],
   zeus: [
     '.....y..y..y..y........zz',
     '.....yzyyzyyzyy.......zz.',
@@ -552,13 +579,15 @@ export const SPRITES: Record<string, string[]> = {
 /** 지금 단계에 맞는 신의 스프라이트 이름 */
 export function heroSprite(s: GameState): string {
   if (s.god) return s.god;
-  return formOf(s.level) === 'teen' ? 'teen' : 'baby';
+  const form = formOf(s.level);
+  return form === 'adult' ? 'adult' : form === 'teen' ? 'teen' : 'baby';
 }
 
 /** 배경색: 성장할수록 하늘이 바뀐다 */
 export function skyColors(s: GameState): [string, string] {
   if (s.god === 'zeus') return ['#1E2140', '#3B3F7A'];
   if (s.god === 'poseidon') return ['#082A44', '#0F5C7A'];
+  if (formOf(s.level) === 'adult') return ['#3A1F5C', '#B0603A']; // 노을 진 전장
   if (formOf(s.level) === 'teen') return ['#2B3F8F', '#6C8FE0'];
   return ['#3A2C6B', '#8C6BD1'];
 }

@@ -3,17 +3,24 @@ import { WeaponId } from './weapons';
 /** 골드로 올리는 강화 항목 */
 export type UpgradeId = 'damage' | 'speed' | 'crit' | 'gold';
 
-/** Lv.200에 고르는 신 */
+/** Lv.3000에 고르는 신 */
 export type GodId = 'zeus' | 'poseidon';
 
 export type SkillId =
-  | 'teen_slash' // 청소년 신 (Lv.100~199)
+  | 'teen_slash' // 청소년 신 (Lv.1000~)
+  | 'adult_whirl' // 성인 신 (Lv.2000~)
   | 'zeus_bolt'
   | 'zeus_storm'
-  | 'zeus_judgment' // 제우스 궁극기 (Lv.1000)
+  | 'zeus_chain' // Lv.4000
+  | 'zeus_eagle' // Lv.6000
+  | 'zeus_king' // Lv.8000
+  | 'zeus_judgment' // 제우스 궁극기 (Lv.10000)
   | 'poseidon_wave'
   | 'poseidon_trident'
-  | 'poseidon_kraken' // 포세이돈 궁극기 (Lv.1000)
+  | 'poseidon_maelstrom' // Lv.4000
+  | 'poseidon_quake' // Lv.6000
+  | 'poseidon_blessing' // Lv.8000
+  | 'poseidon_kraken' // 포세이돈 궁극기 (Lv.10000)
   | 'zeus_gigas' // 레이드 「기간토마키아」 첫 클리어 보상 (제우스)
   | 'poseidon_nisyros'; // 레이드 「기간토마키아」 첫 클리어 보상 (포세이돈)
 
@@ -22,8 +29,8 @@ export type RaidId = 'gigantomachy' | 'typhoeus';
 /** 레이드 중 일어나는 일. 화면에서 컷신·연출을 띄우는 데 쓴다. */
 export type RaidEvent = 'intro' | 'boss' | 'tendon' | 'hermes' | 'enrage' | 'breath' | 'strike' | 'down' | 'clear' | 'fail';
 
-/** 성장 단계: 아기(1~99) → 청소년(100~199) → 신(200~) */
-export type Form = 'baby' | 'teen' | 'god';
+/** 성장 단계: 아기(1~999) → 청소년(1000~1999) → 성인(2000~2999) → 신(3000~) */
+export type Form = 'baby' | 'teen' | 'adult' | 'god';
 
 export interface Monster {
   kind: string; // 스프라이트 이름
@@ -95,13 +102,14 @@ export interface GameState {
   version: number;
   level: number;
   xp: number; // 현재 레벨에서 모은 경험치
-  god: GodId | null; // Lv.200에 고르기 전에는 null
+  god: GodId | null; // Lv.3000에 고르기 전에는 null
   wave: number; // 지금 싸우는 몬스터 번호. 10의 배수가 보스
   maxWave: number;
   gold: number;
   levels: Record<UpgradeId, number>; // 강화 레벨
   monster: Monster;
   bossTimeLeft: number | null; // 보스전 남은 시간(ms). 보스가 아니면 null
+  bossBonusLeft: number; // 이번 보스전(또는 레이드)에서 스킬로 더 늘릴 수 있는 시간(ms). 무한히 늘려 버티는 것을 막는다
   farming: boolean; // 보스에게 졌으면 true: 같은 웨이브에서 골드를 모은다
   attackCooldown: number; // 다음 자동 공격까지 남은 시간(ms)
   skillCooldowns: Partial<Record<SkillId, number>>; // 남은 재사용 대기시간(ms)

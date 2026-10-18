@@ -267,6 +267,34 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
       zoomIt(0.05);
     } else if (id === 'teen_slash') {
       add({ kind: 'glow', x: p.heroX + 30, y: p.heroY - 20, color: '#7FE8FF', size: 140 });
+    } else if (id === 'adult_whirl') {
+      add({ kind: 'glow', x: p.heroX + 20, y: p.heroY, color: '#FFB347', size: 150 });
+    } else if (id === 'zeus_chain') {
+      flashIt('#FFF6B0', 0.35, 160);
+      add({ kind: 'glow', x: p.heroX, y: p.heroY, color: '#FFE97A', size: 180 });
+    } else if (id === 'zeus_eagle') {
+      tintIt('#0A0820', 0.4, 300);
+      add({ kind: 'speedlines', width, height: HEIGHT, x: p.monX, y: p.monY, color: '#FFE97A' });
+    } else if (id === 'zeus_king') {
+      // 신들의 왕: 왕관 같은 금빛 광채 → 다른 스킬 쿨타임 초기화
+      flashIt('#FFD54A', 0.7, 400, true);
+      zoomIt(0.05);
+      add({ kind: 'rays', x: p.heroX, y: p.heroY, color: '#FFD54A', size: 380, count: 16 });
+      add({ kind: 'glow', x: p.heroX, y: p.heroY, color: '#FFD54A', size: 260 });
+      add({ kind: 'groundRing', x: p.heroX, y: p.groundY - 4, color: '#FFD54A', size: 260 });
+      add({ kind: 'toast', text: '👑 모든 스킬을 다시 쓸 수 있다!', color: colors.gold });
+    } else if (id === 'poseidon_maelstrom') {
+      tintIt('#021A33', 0.35, 600);
+      add({ kind: 'groundRing', x: p.monX, y: p.groundY - 4, color: '#6FE3FF', size: 240 });
+    } else if (id === 'poseidon_quake') {
+      shakeIt(10);
+      add({ kind: 'groundRing', x: p.heroX, y: p.groundY - 4, color: '#C9A26B', size: 200 });
+    } else if (id === 'poseidon_blessing') {
+      flashIt('#9FF3FF', 0.5, 400, true);
+      add({ kind: 'rays', x: p.heroX, y: p.heroY, color: '#9FF3FF', size: 320 });
+      add({ kind: 'glow', x: p.heroX, y: p.heroY, color: '#6FE3FF', size: 240 });
+      add({ kind: 'debris', x: p.heroX, y: p.heroY, color: '#E6FBFF', count: 16, power: 90 }); // 물방울
+      add({ kind: 'toast', text: raid ? '🐚 쿨타임 절반 + 체력 30% 회복' : '🐚 다른 스킬 쿨타임 절반', color: '#6FE3FF' });
     } else if (id === 'zeus_gigas') {
       tintIt('#0A0820', 0.5, 900);
       flashIt('#FFE97A', 0.5, 240, true);
@@ -398,6 +426,85 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
           }
           damageText(hit, last ? 40 : 26, P);
         });
+        return;
+      }
+      case 'adult_whirl': {
+        // 회오리 검무: 돌진하며 검기를 빙글빙글 4번. 마지막은 큰 회오리 + 히트스톱
+        const i = combo?.index ?? 0;
+        const C = '#FFB347';
+        if (i === 0) dashIt(width * 0.3, C);
+        add({ kind: 'crescent', x: p.monX, y: p.monY, angle: i * 90, radius: last ? 100 : 72, color: C, flip: i % 2 === 1 });
+        add({ kind: 'crescent', x: p.monX, y: p.monY, angle: i * 90 + 180, radius: last ? 90 : 60, color: '#FFFFFF', flip: i % 2 === 0 });
+        impact(p.monX, p.monY, C, last ? 1.5 : 0.8, last);
+        hitMonster(last ? 26 : 12, last ? 90 : 20);
+        shakeIt(last ? 13 : 5, last ? 90 : 20);
+        if (last) {
+          zoomIt(0.06);
+          add({ kind: 'groundRing', x: p.monX, y: p.groundY - 4, color: C, size: 230 });
+        }
+        damageText(hit, last ? 32 : 22, C);
+        return;
+      }
+      case 'zeus_chain': {
+        // 연쇄 번개: 몬스터 주변을 튕기며 가지 번개가 차례로 꽂힌다
+        const i = combo?.index ?? 0;
+        const C = '#FFE97A';
+        const x = p.monX + [0, -40, 35, -20, 10][i % 5];
+        add({ kind: 'bolt', width, height: HEIGHT, x, toY: p.monY + 10, color: C, thick: last ? 12 : 7, branches: 3 });
+        add({ kind: 'glow', x, y: p.monY, color: C, size: last ? 160 : 100 });
+        add({ kind: 'debris', x, y: p.monY, color: C, count: 6, power: 60 });
+        flashIt('#FFF6B0', last ? 0.6 : 0.25, 140, last);
+        hitMonster(last ? 22 : 9, last ? 70 : 0);
+        shakeIt(last ? 12 : 5, last ? 70 : 0);
+        damageText(hit, last ? 30 : 22, C);
+        return;
+      }
+      case 'zeus_eagle': {
+        // 독수리 강하: 하늘 왼쪽 위에서 금빛 독수리가 사선으로 내리꽂힌다
+        const C = '#FFE97A';
+        add({ kind: 'arrow', fromX: p.heroX - 40, fromY: -20, toX: p.monX, toY: p.monY, color: C });
+        add({ kind: 'thrust', fromX: p.heroX, toX: p.monX + 30, y: p.monY - 40, color: C });
+        later(200, () => {
+          impact(p.monX, p.monY, C, 2, true);
+          add({ kind: 'debris', x: p.monX, y: p.monY, color: '#FFFFFF', count: 16, power: 120 }); // 깃털
+          add({ kind: 'groundRing', x: p.monX, y: p.groundY - 4, color: C, size: 280 });
+          flashIt(C, 0.8, 320, true);
+          zoomIt(0.08);
+          hitMonster(32, 110);
+          shakeIt(18, 110);
+          damageText(hit, 40, C);
+        });
+        return;
+      }
+      case 'poseidon_maelstrom': {
+        // 소용돌이: 물살 참격이 몬스터 둘레를 빙글빙글 돌며 휘감는다
+        const i = combo?.index ?? 0;
+        const C = '#6FE3FF';
+        add({ kind: 'crescent', x: p.monX, y: p.monY, angle: i * 60, radius: last ? 105 : 80, color: C, flip: true });
+        add({ kind: 'crescent', x: p.monX, y: p.monY + 10, angle: i * 60 + 120, radius: last ? 80 : 58, color: '#E6FBFF', flip: true });
+        add({ kind: 'debris', x: p.monX, y: p.monY, color: '#E6FBFF', count: 8, power: 70 });
+        hitMonster(last ? 26 : 10, last ? 80 : 0);
+        shakeIt(last ? 12 : 4, last ? 80 : 0);
+        if (last) {
+          add({ kind: 'wave', width, height: 170, bottom: GROUND - 8 });
+          impact(p.monX, p.monY, C, 1.4, true);
+        }
+        damageText(hit, last ? 32 : 22, C);
+        return;
+      }
+      case 'poseidon_quake': {
+        // 대지진: 삼지창으로 땅을 내리찍으면 땅이 갈라지며 몬스터 밑에서 바위가 솟구친다
+        const C = '#C9A26B';
+        add({ kind: 'groundRing', x: p.monX, y: p.groundY - 4, color: C, size: 360 });
+        add({ kind: 'debris', x: p.monX, y: p.groundY - 6, color: '#7A5A3E', count: 26, power: 160 });
+        add({ kind: 'debris', x: p.monX - 60, y: p.groundY - 6, color: '#7A5A3E', count: 10, power: 100 });
+        add({ kind: 'smoke', x: p.monX, y: p.groundY - 20, count: 8 });
+        impact(p.monX, p.monY + 20, C, 1.8, true);
+        flashIt('#FFE2B0', 0.6, 300, true);
+        zoomIt(0.07);
+        hitMonster(30, 100);
+        shakeIt(24, 100);
+        damageText(hit, 40, C);
         return;
       }
       case 'heracles': {
@@ -767,6 +874,11 @@ export function skillColor(id: SkillId): string {
   switch (id) {
     case 'teen_slash':
       return '#7FE8FF';
+    case 'adult_whirl':
+      return '#FFB347';
+    case 'zeus_chain':
+    case 'zeus_eagle':
+    case 'zeus_king':
     case 'zeus_bolt':
     case 'zeus_storm':
     case 'zeus_judgment':
@@ -779,6 +891,11 @@ export function skillColor(id: SkillId): string {
       return '#B48CFF';
     case 'poseidon_nisyros':
       return '#5FD3B0';
+    case 'poseidon_maelstrom':
+    case 'poseidon_blessing':
+      return '#6FE3FF';
+    case 'poseidon_quake':
+      return '#C9A26B';
   }
 }
 

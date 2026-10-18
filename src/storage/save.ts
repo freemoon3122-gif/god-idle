@@ -19,7 +19,8 @@ export async function loadGame(): Promise<GameState | null> {
     const json = await AsyncStorage.getItem(SAVE_KEY);
     if (!json) return null;
     const state = JSON.parse(json) as GameState;
-    return state.version === SAVE_VERSION ? migrate(state) : null;
+    // 예전 버전 저장도 migrate가 새 형식으로 바꿔 준다. 더 새로운 버전(앱을 되돌린 경우)만 버린다
+    return (state.version ?? 1) <= SAVE_VERSION ? migrate(state) : null;
   } catch (e) {
     console.warn('불러오기 실패', e);
     return null;

@@ -19,11 +19,14 @@ interface Props {
  */
 export function DevPanel({ onSetLevel, onAddGold, onReset, onGiveWeapon, onUnlockRaids }: Props) {
   const buttons: [string, () => void][] = [
-    ['Lv.99', () => onSetLevel(99)],
-    ['Lv.100', () => onSetLevel(100)],
-    ['Lv.199', () => onSetLevel(199)],
-    ['Lv.200', () => onSetLevel(200)],
+    ['Lv.999', () => onSetLevel(999)],
     ['Lv.1000', () => onSetLevel(1000)],
+    ['Lv.2000', () => onSetLevel(2000)],
+    ['Lv.3000', () => onSetLevel(3000)],
+    ['Lv.4000', () => onSetLevel(4000)],
+    ['Lv.6000', () => onSetLevel(6000)],
+    ['Lv.8000', () => onSetLevel(8000)],
+    ['Lv.10000', () => onSetLevel(10000)],
     ['골드 ×1000', onAddGold],
     ['커먼 ×3', () => [0, 1, 2].forEach(() => onGiveWeapon('wood_stick'))],
     ['레전드 ×3', () => [0, 1, 2].forEach(() => onGiveWeapon('hades_scythe'))],

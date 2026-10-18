@@ -18,7 +18,7 @@ import {
   startRaid,
   tick,
 } from '../src/game/engine';
-import { RAIDS } from '../src/game/raids';
+import { RAIDS, TYPHON_UNLOCK_LEVEL } from '../src/game/raids';
 import { GameState, GodId, RaidId } from '../src/game/types';
 import { WEAPON_LIST } from '../src/game/weapons';
 
@@ -61,7 +61,7 @@ function climb(base: GameState, id: RaidId) {
   for (let fails = 0; fails < 3; ) {
     const entry: GameState = {
       ...base,
-      level: id === 'typhoeus' ? Math.max(base.level, 500) : base.level, // 티포에우스는 Lv.500부터 열린다
+      level: id === 'typhoeus' ? Math.max(base.level, TYPHON_UNLOCK_LEVEL) : base.level, // 티포에우스는 Lv.5000부터 열린다
       raidClears: { gigantomachy: id === 'gigantomachy' ? clears : 1, typhoeus: id === 'typhoeus' ? clears : 0 },
       raidTickets: { day: '', used: {} },
     };

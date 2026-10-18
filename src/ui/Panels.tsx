@@ -1,6 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { formOf, GOD_LEVEL, GODS, SKILLS, TEEN_LEVEL, ULTIMATE_LEVEL, UPGRADES, upgradeCost, xpToNext } from '../game/balance';
+import { ADULT_LEVEL, formOf, GOD_LEVEL, GODS, SKILLS, TEEN_LEVEL, ULTIMATE_LEVEL, UPGRADES, upgradeCost, xpToNext } from '../game/balance';
 import { availableSkills, bulkPlan, canCast, canEnhance, canFuse, formName, ownedPower } from '../game/engine';
 import { formatNumber } from '../game/format';
 import { GameState, SkillId, UpgradeId } from '../game/types';
@@ -28,19 +28,24 @@ export function StatusBar({ state }: { state: GameState }) {
   );
 }
 
-/** 스킬 버튼. 아기 신은 스킬이 없고, 청소년은 삼연참, 신은 2개 (+ Lv.1000 궁극기) */
+/** 스킬 버튼. 아기 신은 스킬이 없고, 청소년 1개, 성인 2개, 신은 최대 5개 + 궁극기 */
 export function SkillBar({ state, onCast }: { state: GameState; onCast: (id: SkillId) => void }) {
   const skills = availableSkills(state);
   const form = formOf(state.level);
   // 다음에 열릴 스킬 안내
+  const nextGodSkill = state.god ? GODS[state.god].extraSkills.find(([, lv]) => state.level < lv) : undefined;
   const nextHint =
     form === 'baby'
       ? `🔒 Lv.${TEEN_LEVEL} 청소년 신이 되면 「삼연참」이 열려요`
       : form === 'teen'
-        ? `🔒 Lv.${GOD_LEVEL}에 신이 되면 신의 스킬 2개가 열려요`
-        : state.god && state.level < ULTIMATE_LEVEL
-          ? `🔒 Lv.${ULTIMATE_LEVEL}에 궁극기 「${SKILLS[GODS[state.god].ultimate].name}」이 열려요`
-          : null;
+        ? `🔒 Lv.${ADULT_LEVEL} 성인 신이 되면 「${SKILLS.adult_whirl.name}」이 열려요`
+        : form === 'adult'
+          ? `🔒 Lv.${GOD_LEVEL}에 진짜 신이 되면 신의 스킬이 열려요`
+          : nextGodSkill
+            ? `🔒 Lv.${nextGodSkill[1]}에 「${SKILLS[nextGodSkill[0]].emoji} ${SKILLS[nextGodSkill[0]].name}」이 열려요`
+            : state.god && state.level < ULTIMATE_LEVEL
+              ? `🔒 Lv.${ULTIMATE_LEVEL}에 궁극기 「${SKILLS[GODS[state.god].ultimate].name}」이 열려요`
+              : null;
 
   return (
     <View style={styles.skillArea}>

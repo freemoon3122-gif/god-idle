@@ -34,7 +34,7 @@ let s: GameState = newGame(0);
 let farmingSince = 0;
 let elapsed = 0;
 const milestones: string[] = [];
-const MILESTONE_LEVELS = [100, 200, 1000];
+const MILESTONE_LEVELS = [1000, 2000, 3000, 10000];
 const reached = new Set<number>();
 
 for (const minutes of CHECKPOINTS_MIN) {
