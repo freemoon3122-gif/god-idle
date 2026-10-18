@@ -5,6 +5,8 @@ import { BOSS_TIME_LIMIT, SKILLS, stageLabel } from '../game/balance';
 import { formatNumber } from '../game/format';
 import { ActionResult, GameState, Hit, SkillId } from '../game/types';
 import { RARITY_INFO, WEAPONS } from '../game/weapons';
+import Svg, { Circle, Defs, RadialGradient, Stop } from 'react-native-svg';
+
 import { Effect, EffectSpec, EffectView } from './effects';
 import { PixelSprite } from './PixelSprite';
 import { heroSprite, skyColors, SPRITES } from './sprites';
@@ -55,6 +57,8 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
   const knock = useRef(new Animated.Value(0)).current;
   const hitFlash = useRef(new Animated.Value(0)).current;
   const spawn = useRef(new Animated.Value(1)).current;
+  const zoom = useRef(new Animated.Value(1)).current;
+  const squash = useRef(new Animated.Value(1)).current;
   const bob = useRef(new Animated.Value(0)).current;
   const aura = useRef(new Animated.Value(0)).current;
 
@@ -117,24 +121,31 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
     });
   }, []);
   const remove = useCallback((id: number) => setEffects((list) => list.filter((e) => e.id !== id)), []);
+  const later = (ms: number, fn: () => void) => setTimeout(fn, ms);
 
-  /** 화면 흔들림: 세기(px)만큼 무작위로 몇 번 흔들고 제자리로 */
-  const shakeIt = (power: number) => {
-    const steps = Array.from({ length: 5 }, (_, i) => {
-      const k = power * (1 - i / 5);
+  /** 화면 흔들림: 세기(px)만큼 무작위로 몇 번 흔들고 제자리로. delay = 히트스톱 동안은 멈춰 있다가 흔들린다 */
+  const shakeIt = (power: number, delay = 0) => {
+    const steps = Array.from({ length: 6 }, (_, i) => {
+      const k = power * (1 - i / 6);
       return Animated.timing(shake, {
         toValue: { x: (Math.random() - 0.5) * 2 * k, y: (Math.random() - 0.5) * 2 * k },
-        duration: 28,
+        duration: 26,
         useNativeDriver: ND,
       });
     });
-    Animated.sequence([...steps, Animated.timing(shake, { toValue: { x: 0, y: 0 }, duration: 40, useNativeDriver: ND })]).start();
+    Animated.sequence([Animated.delay(delay), ...steps, Animated.timing(shake, { toValue: { x: 0, y: 0 }, duration: 40, useNativeDriver: ND })]).start();
   };
 
-  const flashIt = (color: string, peak: number, duration = 220) => {
-    setFlashColor(color);
+  /** 화면 번쩍임. double이면 하얗게 한 번 → 색으로 한 번, 두 번 번쩍인다 */
+  const flashIt = (color: string, peak: number, duration = 220, double = false) => {
+    setFlashColor(double ? '#FFFFFF' : color);
     flash.setValue(peak);
-    Animated.timing(flash, { toValue: 0, duration, easing: Easing.out(Easing.quad), useNativeDriver: ND }).start();
+    Animated.timing(flash, { toValue: 0, duration: double ? 90 : duration, easing: Easing.out(Easing.quad), useNativeDriver: ND }).start(() => {
+      if (!double) return;
+      setFlashColor(color);
+      flash.setValue(peak * 0.7);
+      Animated.timing(flash, { toValue: 0, duration, easing: Easing.out(Easing.quad), useNativeDriver: ND }).start();
+    });
   };
 
   const tintIt = (color: string, peak: number, hold: number) => {
@@ -146,19 +157,38 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
     ]).start();
   };
 
-  /** 몬스터 피격: 뒤로 밀려나고 하얗게 번쩍 */
-  const hitMonster = (power: number) => {
-    knock.setValue(power);
-    Animated.spring(knock, { toValue: 0, friction: 4, tension: 220, useNativeDriver: ND }).start();
-    hitFlash.setValue(1);
-    Animated.timing(hitFlash, { toValue: 0, duration: 140, useNativeDriver: ND }).start();
+  /** 줌 펀치: 화면 전체가 순간 확대됐다가 튕기듯 돌아온다 */
+  const zoomIt = (amount: number) => {
+    zoom.setValue(1 + amount);
+    Animated.spring(zoom, { toValue: 1, friction: 5, tension: 260, useNativeDriver: ND }).start();
   };
 
-  /** 신의 돌진: 앞으로 튀어나갔다 돌아온다 */
-  const dashIt = (distance: number) => {
+  /**
+   * 몬스터 피격: 하얗게 번쩍 → (히트스톱 동안 멈칫) → 뒤로 날아갔다 튕겨 돌아온다.
+   * 히트스톱: 강한 타격 순간 0.05~0.1초 멈추는 연출. 액션 게임 "손맛"의 핵심이다.
+   */
+  const hitMonster = (power: number, hitStop = 0) => {
+    hitFlash.setValue(1);
+    Animated.sequence([Animated.delay(hitStop), Animated.timing(hitFlash, { toValue: 0, duration: 150, useNativeDriver: ND })]).start();
+    knock.setValue(hitStop > 0 ? power * 0.3 : power);
+    Animated.sequence([
+      Animated.delay(hitStop),
+      Animated.timing(knock, { toValue: power, duration: 40, useNativeDriver: ND }),
+      Animated.spring(knock, { toValue: 0, friction: 4, tension: 200, useNativeDriver: ND }),
+    ]).start();
+    squash.setValue(hitStop > 0 ? 0.82 : 0.9);
+    Animated.sequence([Animated.delay(hitStop), Animated.spring(squash, { toValue: 1, friction: 3, tension: 300, useNativeDriver: ND })]).start();
+  };
+
+  /** 신의 돌진: 앞으로 튀어나갔다 돌아온다. 지나간 자리에 잔상이 남는다 */
+  const dashIt = (distance: number, ghostColor: string) => {
+    for (let i = 1; i <= 3; i++) {
+      add({ kind: 'ghost', x: SIDE, bottom: GROUND, sprite: hero, scale: HERO_SCALE, color: ghostColor, dx: (distance * i) / 4 });
+    }
     Animated.sequence([
       Animated.timing(dash, { toValue: distance, duration: 55, easing: Easing.out(Easing.quad), useNativeDriver: ND }),
-      Animated.timing(dash, { toValue: 0, duration: 150, easing: Easing.in(Easing.quad), useNativeDriver: ND }),
+      Animated.delay(60),
+      Animated.timing(dash, { toValue: 0, duration: 170, easing: Easing.inOut(Easing.quad), useNativeDriver: ND }),
     ]).start();
   };
 
@@ -173,7 +203,16 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
       text: formatNumber(hit.damage) + (hit.crit ? '!' : ''),
       color: hit.crit ? colors.gold : color,
       size: hit.crit ? size + 6 : size,
+      crit: hit.crit,
     });
+  };
+
+  /** 강한 타격 한 세트: 빛 번짐 + 폭발 + 파편 (+ 광선) */
+  const impact = (x: number, y: number, color: string, scale: number, rays = false) => {
+    add({ kind: 'glow', x, y, color, size: 160 * scale });
+    add({ kind: 'burst', x, y, color, size: 120 * scale });
+    add({ kind: 'debris', x, y, color, count: Math.round(10 * scale), power: 70 * scale });
+    if (rays) add({ kind: 'rays', x, y, color, size: 300 * scale });
   };
 
   // ───────────── 스킬 시전 연출 (피해가 없는 부분: 배너, 분위기) ─────────────
@@ -186,18 +225,34 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
     add({ kind: 'banner', text: `${skill.name}!`, color, big: isUlt });
 
     if (id === 'zeus_storm') {
-      flashIt('#FFF6B0', 0.6);
-      shakeIt(8);
-      for (let i = 0; i < 3; i++) setTimeout(() => add({ kind: 'bolt', x: 60 + Math.random() * (width - 120), toY: p.groundY, color: '#FFE97A', thick: 6 }), i * 90);
+      tintIt('#0A0820', 0.45, 350);
+      flashIt('#FFF6B0', 0.6, 260, true);
+      shakeIt(9);
+      add({ kind: 'glow', x: p.heroX, y: p.heroY, color: '#FFE97A', size: 220 });
+      for (let i = 0; i < 4; i++) {
+        later(i * 80, () => add({ kind: 'bolt', width, height: HEIGHT, x: 50 + Math.random() * (width - 100), toY: p.groundY, color: '#FFE97A', thick: 6 }));
+      }
     } else if (id === 'poseidon_trident') {
-      flashIt('#9FF3FF', 0.45);
-      for (let i = 0; i < 4; i++) setTimeout(() => add({ kind: 'thrust', fromX: p.heroX, toX: p.monX, y: p.monY - 20 + i * 14, color: '#6FE3FF' }), i * 60);
+      flashIt('#9FF3FF', 0.5, 240, true);
+      add({ kind: 'rays', x: p.heroX, y: p.heroY, color: '#6FE3FF', size: 260 });
+      for (let i = 0; i < 5; i++) {
+        later(i * 55, () => {
+          add({ kind: 'thrust', fromX: p.heroX, toX: p.monX + 20, y: p.monY - 30 + i * 14, color: '#6FE3FF' });
+          hitMonster(6);
+        });
+      }
     } else if (id === 'poseidon_wave') {
-      add({ kind: 'wave', width, height: 170, bottom: GROUND - 6 });
+      add({ kind: 'wave', width, height: 190, bottom: GROUND - 8 });
     } else if (id === 'zeus_judgment') {
-      tintIt('#05040F', 0.65, 1000);
+      tintIt('#04030C', 0.75, 1100);
+      add({ kind: 'speedlines', width, height: HEIGHT, x: p.monX, y: p.monY, color: '#FFE97A' });
+      zoomIt(0.05);
     } else if (id === 'poseidon_kraken') {
-      tintIt('#021A33', 0.7, 1150);
+      tintIt('#021A33', 0.75, 1250);
+      add({ kind: 'speedlines', width, height: HEIGHT, x: p.monX, y: p.monY, color: '#B48CFF' });
+      zoomIt(0.05);
+    } else if (id === 'teen_slash') {
+      add({ kind: 'glow', x: p.heroX + 30, y: p.heroY - 20, color: '#7FE8FF', size: 140 });
     }
   };
 
@@ -214,85 +269,112 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
         if (autoCount > 2 && Math.random() < 0.5) return;
         const color = orbColor(state);
         add({ kind: 'orb', fromX: p.heroX, fromY: p.heroY, toX: p.monX, toY: p.monY, color });
-        setTimeout(() => {
-          add({ kind: 'sparks', x: p.monX, y: p.monY, color, count: 5, power: 34 });
+        later(160, () => {
+          add({ kind: 'glow', x: p.monX, y: p.monY, color, size: 70 });
+          add({ kind: 'debris', x: p.monX, y: p.monY, color, count: 4, power: 36 });
           hitMonster(5);
           // 스킬 숫자가 잘 보이도록, 같은 순간에 스킬 타격이 있으면 기본 공격 숫자는 생략
           if (!skillInSameTick) damageText(hit, 16, colors.text);
-        }, 150);
+        });
         return;
       }
       case 'tap': {
-        add({ kind: 'slash', x: p.monX, y: p.monY, angle: (Math.random() - 0.5) * 120, length: 120, color: '#FFFFFF' });
-        add({ kind: 'sparks', x: p.monX, y: p.monY, color: '#FFFFFF', count: 6, power: 40 });
-        hitMonster(7);
+        add({ kind: 'crescent', x: p.monX, y: p.monY, angle: Math.random() * 360, radius: 46, color: '#FFFFFF', flip: Math.random() < 0.5 });
+        add({ kind: 'burst', x: p.monX, y: p.monY, color: '#FFFFFF', size: 70 });
+        add({ kind: 'debris', x: p.monX, y: p.monY, color: '#FFFFFF', count: 5, power: 45 });
+        hitMonster(8);
         shakeIt(3);
         damageText(hit, 18, colors.text);
         return;
       }
       case 'teen_slash': {
-        // 삼연참: 돌진하며 찌르기 → 위아래로 교차하는 참격, 세 번째는 크고 화면이 번쩍
-        const angles = [-28, 28, 0];
+        // 삼연참: 잔상을 남기며 돌진 → 초승달 검기가 X자로 교차 → 마지막은 거대한 횡베기 + 히트스톱
         const i = combo?.index ?? 0;
-        dashIt(width * 0.32);
-        add({ kind: 'slash', x: p.monX, y: p.monY, angle: angles[i], length: last ? 260 : 190, color: '#7FE8FF' });
-        if (last) add({ kind: 'slash', x: p.monX, y: p.monY + 4, angle: 0, length: 300, color: '#FFFFFF' });
-        add({ kind: 'sparks', x: p.monX, y: p.monY, color: '#7FE8FF', count: last ? 18 : 10, power: last ? 90 : 60 });
-        hitMonster(last ? 22 : 12);
-        shakeIt(last ? 11 : 5);
-        if (last) {
-          flashIt('#FFFFFF', 0.45);
-          add({ kind: 'ring', x: p.monX, y: p.monY, color: '#7FE8FF', size: 150 });
-        }
-        damageText(hit, last ? 30 : 24, '#7FE8FF');
+        const angles = [-35, 35, 0];
+        const C = '#7FE8FF';
+        dashIt(width * 0.34, C);
+        later(50, () => {
+          add({ kind: 'crescent', x: p.monX, y: p.monY, angle: angles[i], radius: last ? 95 : 70, color: C, flip: i === 1 });
+          if (last) add({ kind: 'crescent', x: p.monX, y: p.monY + 6, angle: 180, radius: 110, color: '#FFFFFF', flip: true });
+          impact(p.monX, p.monY, C, last ? 1.5 : 0.9, last);
+          hitMonster(last ? 26 : 13, last ? 90 : 30);
+          shakeIt(last ? 13 : 6, last ? 90 : 30);
+          if (last) {
+            zoomIt(0.07);
+            flashIt(C, 0.6, 260, true);
+            add({ kind: 'speedlines', width, height: HEIGHT, x: p.monX, y: p.monY, color: C });
+            add({ kind: 'groundRing', x: p.monX, y: p.groundY - 4, color: C, size: 220 });
+          }
+          damageText(hit, last ? 32 : 24, C);
+        });
         return;
       }
       case 'zeus_bolt': {
-        add({ kind: 'bolt', x: p.monX, toY: p.monY, color: '#FFE97A', thick: 10 });
-        flashIt('#FFFDE0', 0.7);
-        shakeIt(13);
-        add({ kind: 'ring', x: p.monX, y: p.monY, color: '#FFE97A', size: 170 });
-        add({ kind: 'sparks', x: p.monX, y: p.monY, color: '#FFE97A', count: 18, power: 100 });
-        hitMonster(20);
-        damageText(hit, 32, '#FFE97A');
+        const C = '#FFE97A';
+        add({ kind: 'bolt', width, height: HEIGHT, x: p.monX, toY: p.monY, color: C, thick: 12, branches: 3 });
+        flashIt(C, 0.8, 260, true);
+        impact(p.monX, p.monY, C, 1.5, true);
+        add({ kind: 'groundRing', x: p.monX, y: p.groundY - 4, color: C, size: 240 });
+        add({ kind: 'smoke', x: p.monX, y: p.groundY - 20, count: 5 });
+        zoomIt(0.06);
+        hitMonster(24, 80);
+        shakeIt(15, 80);
+        damageText(hit, 34, C);
         return;
       }
       case 'poseidon_wave': {
-        flashIt('#B8F4FF', 0.45);
-        shakeIt(10);
-        add({ kind: 'sparks', x: p.monX, y: p.monY, color: '#6FE3FF', count: 20, power: 90 });
-        hitMonster(24);
-        damageText(hit, 30, '#6FE3FF');
+        const C = '#6FE3FF';
+        flashIt(C, 0.5, 260, true);
+        impact(p.monX, p.monY, C, 1.3);
+        add({ kind: 'debris', x: p.monX, y: p.monY + 20, color: '#E6FBFF', count: 18, power: 120 }); // 물보라
+        zoomIt(0.04);
+        hitMonster(30, 60);
+        shakeIt(12, 60);
+        damageText(hit, 32, C);
         return;
       }
       case 'zeus_judgment': {
-        // 올림포스의 심판: 번개 8줄기가 몬스터 주변에 연달아 떨어지고, 마지막은 초대형
-        const x = last ? p.monX : p.monX + (Math.random() - 0.5) * 140;
-        add({ kind: 'bolt', x, toY: p.groundY - 6, color: '#FFE97A', thick: last ? 18 : 9 });
-        add({ kind: 'sparks', x, y: p.groundY - 10, color: '#FFE97A', count: last ? 30 : 10, power: last ? 140 : 70 });
-        flashIt(last ? '#FFFFFF' : '#FFF6B0', last ? 0.95 : 0.3, last ? 420 : 160);
-        shakeIt(last ? 20 : 7);
-        hitMonster(last ? 30 : 10);
+        // 올림포스의 심판: 번개 8줄기가 몬스터 주변에 쏟아지고, 마지막은 초대형 번개 + 폭발
+        const C = '#FFE97A';
+        const x = last ? p.monX : p.monX + (Math.random() - 0.5) * 160;
+        add({ kind: 'bolt', width, height: HEIGHT, x, toY: p.groundY - 6, color: C, thick: last ? 22 : 9, branches: last ? 4 : 2 });
+        add({ kind: 'groundRing', x, y: p.groundY - 4, color: C, size: last ? 320 : 140 });
+        add({ kind: 'debris', x, y: p.groundY - 12, color: C, count: last ? 24 : 8, power: last ? 150 : 70 });
+        hitMonster(last ? 34 : 10, last ? 110 : 0);
         if (last) {
-          add({ kind: 'ring', x: p.monX, y: p.monY, color: '#FFE97A', size: 260 });
-          add({ kind: 'ring', x: p.monX, y: p.monY, color: '#FFFFFF', size: 180 });
+          impact(p.monX, p.monY, C, 2.2, true);
+          add({ kind: 'smoke', x: p.monX, y: p.groundY - 20, count: 8 });
+          flashIt(C, 1, 450, true);
+          zoomIt(0.09);
+          shakeIt(22, 110);
+        } else {
+          add({ kind: 'glow', x, y: p.groundY - 30, color: C, size: 120 });
+          flashIt('#FFF6B0', 0.3, 140);
+          shakeIt(7);
         }
-        damageText(hit, last ? 38 : 26, '#FFE97A');
+        damageText(hit, last ? 40 : 26, C);
         return;
       }
       case 'poseidon_kraken': {
         // 크라켄 강림: 촉수가 몬스터 양옆에서 번갈아 솟구쳐 내리친다. 마지막엔 해일까지
         const offsets = [-60, 55, -25, 70, -75, 0];
         const i = combo?.index ?? 0;
-        add({ kind: 'tentacle', x: p.monX + offsets[i % offsets.length], bottom: GROUND - 4, height: last ? 230 : 180, tilt: offsets[i % offsets.length] > 0 ? -10 : 10 });
-        add({ kind: 'sparks', x: p.monX, y: p.monY, color: '#9FE7FF', count: last ? 26 : 12, power: last ? 130 : 70 });
-        shakeIt(last ? 18 : 8);
-        hitMonster(last ? 30 : 12);
-        if (last) {
-          add({ kind: 'wave', width, height: 210, bottom: GROUND - 6 });
-          flashIt('#B8F4FF', 0.8, 380);
-        }
-        damageText(hit, last ? 38 : 26, '#B48CFF');
+        const off = offsets[i % offsets.length];
+        const P = '#B48CFF';
+        add({ kind: 'tentacle', x: p.monX + off, bottom: GROUND - 6, height: last ? 250 : 190, tilt: off > 0 ? -10 : 10 });
+        add({ kind: 'debris', x: p.monX + off, y: p.groundY - 6, color: '#9FE7FF', count: 10, power: 80 }); // 땅에서 튀는 물보라
+        add({ kind: 'groundRing', x: p.monX + off, y: p.groundY - 4, color: '#9FE7FF', size: 150 });
+        later(80, () => {
+          impact(p.monX, p.monY, P, last ? 1.8 : 0.9, last);
+          hitMonster(last ? 34 : 14, last ? 100 : 30);
+          shakeIt(last ? 20 : 8, last ? 100 : 30);
+          if (last) {
+            add({ kind: 'wave', width, height: 220, bottom: GROUND - 8 });
+            flashIt('#B8F4FF', 0.9, 420, true);
+            zoomIt(0.08);
+          }
+          damageText(hit, last ? 40 : 26, P);
+        });
         return;
       }
       default:
@@ -309,14 +391,20 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
       r.hits.forEach((h) => playHit(h, autoCount, skillInSameTick));
       if (r.killed) {
         const p = pos.current;
-        add({ kind: 'sparks', x: p.monX, y: p.monY, color: '#FFFFFF', count: 12, power: 70 });
+        later(120, () => {
+          add({ kind: 'debris', x: p.monX, y: p.monY, color: '#FFFFFF', count: 10, power: 80 });
+          add({ kind: 'smoke', x: p.monX, y: p.monY + 10, count: 3 });
+        });
       }
       for (const id of r.drops) {
         const w = WEAPONS[id];
         const rarity = RARITY_INFO[w.rarity];
         if (w.rarity === 'legend' || w.rarity === 'transcendent') {
+          const p = pos.current;
           add({ kind: 'banner', text: `${w.emoji} ${rarity.name} 획득!`, color: rarity.color, big: w.rarity === 'transcendent' });
-          flashIt(rarity.color, 0.5, 500);
+          add({ kind: 'rays', x: width / 2, y: 150, color: rarity.color, size: 380 });
+          add({ kind: 'glow', x: p.monX, y: p.monY, color: rarity.color, size: 240 });
+          flashIt(rarity.color, 0.55, 500, true);
           shakeIt(w.rarity === 'transcendent' ? 14 : 6);
         }
         add({ kind: 'toast', text: `🎁 [${rarity.name}] ${w.name}`, color: rarity.color });
@@ -330,7 +418,10 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
   return (
     <Pressable onPressIn={onTap} onLayout={(e: LayoutChangeEvent) => setWidth(e.nativeEvent.layout.width)} style={styles.outer}>
       <Animated.View
-        style={[styles.container, { backgroundColor: skyBottom, transform: [{ translateX: shake.x }, { translateY: shake.y }] }]}
+        style={[
+          styles.container,
+          { backgroundColor: skyBottom, transform: [{ translateX: shake.x }, { translateY: shake.y }, { scale: zoom }] },
+        ]}
       >
         <View style={[styles.skyTop, { backgroundColor: skyTop }]} />
         <View style={styles.ground} />
@@ -351,15 +442,25 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
                 {
                   width: heroSize.w * 1.6,
                   height: heroSize.w * 1.6,
-                  borderRadius: heroSize.w,
                   left: -heroSize.w * 0.3,
                   top: heroSize.h / 2 - heroSize.w * 0.8,
-                  backgroundColor: skillColor(state.buff.skill),
-                  opacity: aura.interpolate({ inputRange: [0, 1], outputRange: [0, 0.45] }),
-                  transform: [{ scale: aura.interpolate({ inputRange: [0, 1], outputRange: [0.85, 1.05] }) }],
+                  opacity: aura.interpolate({ inputRange: [0, 1], outputRange: [0.3, 0.9] }),
+                  transform: [{ scale: aura.interpolate({ inputRange: [0, 1], outputRange: [0.85, 1.08] }) }],
                 },
               ]}
-            />
+            >
+              {/* 가운데가 밝고 바깥으로 갈수록 투명해지는 빛 */}
+              <Svg width={heroSize.w * 1.6} height={heroSize.w * 1.6}>
+                <Defs>
+                  <RadialGradient id="aura" cx="50%" cy="50%" r="50%">
+                    <Stop offset="0" stopColor={skillColor(state.buff.skill)} stopOpacity="0.7" />
+                    <Stop offset="0.6" stopColor={skillColor(state.buff.skill)} stopOpacity="0.25" />
+                    <Stop offset="1" stopColor={skillColor(state.buff.skill)} stopOpacity="0" />
+                  </RadialGradient>
+                </Defs>
+                <Circle cx={heroSize.w * 0.8} cy={heroSize.w * 0.8} r={heroSize.w * 0.8} fill="url(#aura)" />
+              </Svg>
+            </Animated.View>
           )}
           <PixelSprite name={hero} scale={HERO_SCALE} />
         </Animated.View>
@@ -374,6 +475,7 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
               { translateX: knock },
               { translateY: bob.interpolate({ inputRange: [0, 1], outputRange: [-3, 0] }) },
               { scale: spawn },
+              { scaleY: squash }, // 맞으면 납작해졌다가 튕겨 돌아온다
             ],
           }}
         >
