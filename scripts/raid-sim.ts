@@ -1,6 +1,6 @@
 /**
  * 레이드 클리어 가능성 시뮬레이터. 실행: npm run raid-sim [zeus|poseidon] [키우는 시간(분)]
- * 단순한 플레이어로 N분 키운 뒤, 두 레이드를 0단계부터 차례로 올라가며 몇 단계까지 깨는지 본다 (스킬은 쿨타임마다, 터치는 안 함).
+ * 단순한 플레이어로 N분 키운 뒤, 일일 던전 점수와 레이드를 0단계부터 몇 단계까지 깨는지 본다 (스킬은 쿨타임마다, 터치는 안 함).
  */
 import { UPGRADES, upgradeCost } from '../src/game/balance';
 import {
@@ -62,7 +62,7 @@ function climb(base: GameState, id: RaidId) {
     const entry: GameState = {
       ...base,
       level: id === 'typhoeus' ? Math.max(base.level, TYPHON_UNLOCK_LEVEL) : base.level, // 티포에우스는 Lv.5000부터 열린다
-      raidClears: { gigantomachy: id === 'gigantomachy' ? clears : 1, typhoeus: id === 'typhoeus' ? clears : 0 },
+      raidClears: { gigantomachy: 1, [id]: clears },
       raidTickets: { day: '', used: {} },
     };
     let r = startRaid(entry, id, 0).state;
@@ -85,5 +85,21 @@ function climb(base: GameState, id: RaidId) {
 }
 // 스킬 쿨타임을 비운 상태로 입장
 const ready = { ...s, skillCooldowns: {}, buff: null, queuedHits: [] };
-climb(ready, 'gigantomachy');
+/** 일일 던전: 5번 들어가서 평균 점수·처치 수·다이아 */
+function daily(base: GameState) {
+  const runs = 5;
+  let points = 0;
+  let kills = 0;
+  let diamonds = 0;
+  for (let i = 0; i < runs; i++) {
+    let r = startRaid({ ...base, raidTickets: { day: '', used: {} } }, 'gigantomachy', 0).state;
+    while (r.raid) r = play(tick(r, DT).state);
+    const d = r.raidResult!.daily!;
+    points += d.points;
+    kills += d.kills;
+    diamonds += r.raidResult!.diamonds;
+  }
+  console.log(`일일 던전 기간토마키아: 평균 점수 ${(points / runs).toFixed(1)}, 처치 ${(kills / runs).toFixed(1)}, 💎 ${(diamonds / runs).toFixed(0)}`);
+}
+if (ready.level >= 3000) daily(ready);
 climb(ready, 'typhoeus');

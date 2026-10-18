@@ -68,6 +68,10 @@ export interface RaidState {
   godHp: number; // 레이드 안에서만 쓰는 신의 체력. 0이 되면 쓰러져서 실패
   godMaxHp: number;
   totalHp: number; // 모든 적의 체력 합 (실패 시 보상 비율 계산용)
+  // 일일 던전(기간토마키아): 거인이 끝없이 나온다
+  lap: number; // 몇 바퀴째인지 (한 바퀴 = 전사 → 투석병 → 왕). 바퀴마다 체력이 커진다
+  kills: number;
+  refHp: number; // 일일 던전 점수 기준: 입장할 때의 내 초당 피해
   totalDamage: number;
   // 기간토마키아: 헤라클레스의 화살 → 필멸의 표식
   heraclesCooldown: number;
@@ -94,6 +98,7 @@ export interface RaidResult {
   diamonds: number;
   coins: number;
   firstClear: boolean;
+  daily: { damage: number; points: number; kills: number } | null; // 일일 던전 결과 (레이드면 null)
 }
 
 /**

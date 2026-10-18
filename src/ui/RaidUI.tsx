@@ -3,12 +3,75 @@ import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SKILLS } from '../game/balance';
 import { canEnterRaid, raidStage, raidUnlocked, ticketsLeft } from '../game/engine';
 import { formatNumber } from '../game/format';
-import { defenseMultiplier, GIGANTO_UNLOCK_LEVEL, godRaidHp, RAID_LIST, RAIDS, stageMultipliers, TYPHON_UNLOCK_LEVEL } from '../game/raids';
+import {
+  DAILY_DIAMOND_CAP,
+  DAILY_LIST,
+  defenseMultiplier,
+  GIGANTO_UNLOCK_LEVEL,
+  godRaidHp,
+  RAID_LIST,
+  RAIDS,
+  stageMultipliers,
+  TYPHON_UNLOCK_LEVEL,
+} from '../game/raids';
 import { StoryLine } from '../game/story';
 import { GameState, RaidId, RaidResult } from '../game/types';
 import { RARITY_INFO, WEAPONS } from '../game/weapons';
 import { PixelSprite, spriteSize } from './PixelSprite';
 import { colors } from './theme';
+
+// ───────────── 일일 던전: 하루 1번, 피해량으로 보상 ─────────────
+
+export function DailyPanel({ state, onEnter }: { state: GameState; onEnter: (id: RaidId) => void }) {
+  const now = Date.now();
+  return (
+    <View style={styles.panel}>
+      <Text style={styles.sectionTitle}>📅 일일 던전</Text>
+      <Text style={styles.sectionDesc}>하루 한 번! 제한 시간 동안 넣은 피해의 총합으로 골드와 💎를 받는다 (하루 최대 💎{DAILY_DIAMOND_CAP}).</Text>
+      {DAILY_LIST.map((d) => {
+        const unlocked = raidUnlocked(state, d.id);
+        const left = ticketsLeft(state, d.id, now);
+        const enterable = canEnterRaid(state, d.id, now);
+        const runs = state.raidClears[d.id] ?? 0;
+        return (
+          <View key={d.id} style={[styles.card, !unlocked && { opacity: 0.6 }]}>
+            <View style={styles.cardHead}>
+              <Text style={styles.raidEmoji}>{d.emoji}</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.raidName}>{d.name}</Text>
+                <Text style={styles.raidSub}>{d.subtitle}</Text>
+              </View>
+              {runs > 0 && <Text style={[styles.clears, { fontSize: 12 }]}>참전 {runs}회</Text>}
+            </View>
+            {d.gimmicks.map((g) => (
+              <Text key={g} style={styles.gimmick}>
+                · {g}
+              </Text>
+            ))}
+            <Text style={styles.gimmick}>· 점수 = 넣은 피해 ÷ 내 초당 피해 · 점수 5점당 💎1</Text>
+            {unlocked ? (
+              <View style={styles.enterRow}>
+                <Text style={styles.tickets}>
+                  🎟️ 오늘 {left}/{d.ticketsPerDay}
+                </Text>
+                <Pressable
+                  onPress={() => onEnter(d.id)}
+                  disabled={!enterable}
+                  accessibilityRole="button"
+                  style={({ pressed }) => [styles.enter, !enterable && styles.enterDisabled, pressed && { opacity: 0.8 }]}
+                >
+                  <Text style={styles.enterText}>{state.raid ? '전투 중' : left > 0 ? '입장' : '내일 다시'}</Text>
+                </Pressable>
+              </View>
+            ) : (
+              <Text style={styles.lock}>🔒 Lv.{GIGANTO_UNLOCK_LEVEL}에 신이 되면 열려요</Text>
+            )}
+          </View>
+        );
+      })}
+    </View>
+  );
+}
 
 // ───────────── 레이드 목록 ─────────────
 
@@ -26,10 +89,7 @@ export function RaidPanel({ state, onEnter }: { state: GameState; onEnter: (id: 
         const enterable = canEnterRaid(state, raid.id, now);
         const stage = raidStage(state, raid.id);
         const m = stageMultipliers(raid.id, stage);
-        const lockText =
-          raid.id === 'gigantomachy'
-            ? `🔒 Lv.${GIGANTO_UNLOCK_LEVEL}에 신이 되면 열려요`
-            : `🔒 Lv.${TYPHON_UNLOCK_LEVEL} + 기간토마키아 클리어 시 열려요`;
+        const lockText = `🔒 Lv.${TYPHON_UNLOCK_LEVEL}에 열려요`;
         return (
           <View key={raid.id} style={[styles.card, !unlocked && { opacity: 0.6 }]}>
             <View style={styles.cardHead}>
@@ -121,18 +181,25 @@ export function RaidResultModal({ result, onClose }: { result: RaidResult | null
       <View style={styles.backdrop}>
         {result && (
           <View style={styles.resultCard}>
-            <Text style={styles.resultEmoji}>{result.cleared ? '🏆' : '🏳️'}</Text>
+            <Text style={styles.resultEmoji}>{result.daily ? '📅' : result.cleared ? '🏆' : '🏳️'}</Text>
             <Text style={styles.resultTitle}>
-              {RAIDS[result.id].name} {result.stage}단계 {result.cleared ? '클리어!' : '실패'}
+              {result.daily ? `${RAIDS[result.id].name} 종료!` : `${RAIDS[result.id].name} ${result.stage}단계 ${result.cleared ? '클리어!' : '실패'}`}
             </Text>
-            {result.cleared && <Text style={styles.resultBody}>다음 단계({result.stage + 1}단계)부터 적이 더 강해져요. 입장권은 돌려받았어요.</Text>}
+            {result.daily && (
+              <View style={styles.dailyBox}>
+                <Text style={styles.dailyLine}>💥 누적 피해 {formatNumber(result.daily.damage)}</Text>
+                <Text style={styles.dailyLine}>⚔️ 쓰러뜨린 거인 {result.daily.kills}명</Text>
+                <Text style={[styles.dailyLine, { color: colors.gold, fontSize: 18 }]}>점수 {Math.floor(result.daily.points)}점</Text>
+              </View>
+            )}
+            {result.cleared && !result.daily && <Text style={styles.resultBody}>다음 단계({result.stage + 1}단계)부터 적이 더 강해져요. 입장권은 돌려받았어요.</Text>}
             {result.knockedOut && <Text style={[styles.resultBody, { color: colors.hp }]}>신이 쓰러졌다... 레벨을 올려 체력을 키우거나 더 빨리 쓰러뜨려야 해요.</Text>}
-            {result.firstClear && <Text style={styles.firstClear}>✨ 첫 클리어 보상 ✨</Text>}
+            {result.firstClear && <Text style={styles.firstClear}>✨ {result.daily ? '첫 참전' : '첫 클리어'} 보상 ✨</Text>}
             {!result.cleared && (
               <Text style={styles.resultBody}>넣은 피해 {Math.floor(result.damagePct * 100)}% → 보상의 일부를 받았어요.</Text>
             )}
             <Text style={styles.reward}>💰 {formatNumber(result.gold)}</Text>
-            <Text style={[styles.reward, { color: colors.xp }]}>EXP {formatNumber(result.xp)}</Text>
+            {result.xp > 0 && <Text style={[styles.reward, { color: colors.xp }]}>EXP {formatNumber(result.xp)}</Text>}
             {(result.coins > 0 || result.diamonds > 0) && (
               <Text style={[styles.rewardLine, { color: colors.text }]}>
                 {result.coins > 0 ? `🪙 강화코인 +${result.coins}  ` : ''}
@@ -209,6 +276,8 @@ const styles = StyleSheet.create({
   firstClear: { color: colors.gold, fontWeight: '900', marginTop: 6 },
   resultBody: { color: colors.subText, fontSize: 13, textAlign: 'center', lineHeight: 19, marginVertical: 6 },
   reward: { color: colors.gold, fontSize: 22, fontWeight: '900', marginTop: 4 },
+  dailyBox: { backgroundColor: colors.panelLight, borderRadius: 12, padding: 10, alignSelf: 'stretch', alignItems: 'center', gap: 2, marginVertical: 8 },
+  dailyLine: { color: colors.text, fontSize: 14, fontWeight: '800' },
   rewardLine: { fontSize: 15, fontWeight: '900', marginTop: 8 },
   skillBox: { backgroundColor: colors.panelLight, borderRadius: 12, padding: 10, marginTop: 10, alignSelf: 'stretch', alignItems: 'center' },
   skillTitle: { color: colors.text, fontWeight: '900', fontSize: 15 },

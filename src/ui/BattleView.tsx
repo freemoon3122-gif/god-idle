@@ -755,8 +755,8 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
             </Animated.View>
           )}
           {raid && raid.stunLeft > 0 && <Text style={styles.stun}>💫</Text>}
-          {/* 레이드 중 신의 체력 */}
-          {raid && (
+          {/* 레이드 중 신의 체력 (적이 공격하는 레이드에서만) */}
+          {raid && raid.attack > 0 && (
             <View style={[styles.godHpTrack, { width: Math.min(heroSize.w, 110) }]} pointerEvents="none">
               <View style={[styles.godHpFill, { width: `${Math.max(0, raid.godHp / raid.godMaxHp) * 100}%` }]} />
             </View>
@@ -795,7 +795,9 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
         <View style={styles.topRow} pointerEvents="none">
           <Text style={styles.stage}>
             {raid
-              ? `${RAIDS[raid.id].emoji} ${RAIDS[raid.id].name} ${raid.stage}단계 · ${raid.phase + 1}/${phases.length}`
+              ? RAIDS[raid.id].daily
+                ? `${RAIDS[raid.id].emoji} ${RAIDS[raid.id].name} · 처치 ${raid.kills}`
+                : `${RAIDS[raid.id].emoji} ${RAIDS[raid.id].name} ${raid.stage}단계 · ${raid.phase + 1}/${phases.length}`
               : `스테이지 ${stageLabel(state.wave)}`}
           </Text>
           {raid && <Text style={[styles.buff, { color: raid.timeLeft < 15_000 ? colors.hp : colors.text }]}>⏱ {Math.ceil(raid.timeLeft / 1000)}초</Text>}
@@ -855,11 +857,14 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
 /** 레이드 기믹 상태를 HUD 칩으로: [글자, 색] */
 function raidChips(r: NonNullable<GameState['raid']>): [string, string][] {
   const sec = (ms: number) => `${Math.ceil(ms / 1000)}초`;
-  const chips: [string, string][] = [
-    [`💙 ${formatNumber(Math.max(0, r.godHp))}/${formatNumber(r.godMaxHp)}`, colors.xp],
-    [`⚔️ ${formatNumber(r.attack)}`, '#FF8A8A'],
-    [`🛡️ ${formatNumber(r.defense)} (피해 ${Math.round(defenseMultiplier(r.defense) * 100)}%)`, '#C9C2E8'],
-  ];
+  // 일일 던전: 누적 피해와 점수 / 레이드: 신의 체력·적 공격력·방어력
+  const chips: [string, string][] = RAIDS[r.id].daily
+    ? [[`💥 ${formatNumber(r.totalDamage)} · 점수 ${Math.floor(r.totalDamage / r.refHp)}`, colors.gold]]
+    : [
+        [`💙 ${formatNumber(Math.max(0, r.godHp))}/${formatNumber(r.godMaxHp)}`, colors.xp],
+        [`⚔️ ${formatNumber(r.attack)}`, '#FF8A8A'],
+        [`🛡️ ${formatNumber(r.defense)} (피해 ${Math.round(defenseMultiplier(r.defense) * 100)}%)`, '#C9C2E8'],
+      ];
   if (r.id === 'gigantomachy') {
     chips.push(r.markLeft > 0 ? [`🎯 필멸의 표식 ×1.5 ${sec(r.markLeft)}`, colors.gold] : ['🛡️ 불사의 거인: 피해 ½', '#A79FCC']);
   } else {

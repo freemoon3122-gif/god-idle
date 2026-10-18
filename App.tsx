@@ -44,7 +44,7 @@ import { BattleHandle, BattleView } from './src/ui/BattleView';
 import { DevPanel } from './src/ui/DevPanel';
 import { EvolveModal, GodChoiceModal, OfflineModal } from './src/ui/Modals';
 import { SkillBar, StatusBar as GameStatusBar, UpgradeList, WeaponPanel } from './src/ui/Panels';
-import { RaidPanel, RaidResultModal, StoryModal } from './src/ui/RaidUI';
+import { DailyPanel, RaidPanel, RaidResultModal, StoryModal } from './src/ui/RaidUI';
 import { GachaResultModal, ShopPanel, SkillUpgradePanel } from './src/ui/ShopUI';
 import { colors } from './src/ui/theme';
 import { WeaponId } from './src/game/weapons';
@@ -74,14 +74,16 @@ export default function App() {
 
   /** 엔진이 돌려준 결과를 화면 상태에 반영한다. 모든 행동이 이 함수를 거친다. */
   const apply = useCallback((r: ActionResult) => {
+    const prev = gameRef.current; // 이번 행동 전의 상태 (컷신을 처음 한 번만 보여 줄지 판단)
     gameRef.current = r.state;
     setGame(r.state);
     battleRef.current?.play(r); // 타격·스킬·무기 획득 연출
     if (r.evolvedTo === 'teen' || r.evolvedTo === 'adult') setEvolved(r.evolvedTo);
-    // 레이드 이벤트(입장, 보스 등장, 힘줄 절단...)에 맞는 컷신 대사를 모은다. 이야기는 처음(0단계) 도전할 때만 보여 준다.
+    // 레이드 이벤트(입장, 보스 등장, 힘줄 절단...)에 맞는 컷신 대사를 모은다.
+    // 이야기는 처음 도전할 때만 보여 준다 (이번 행동 전까지 클리어·참전 기록이 0일 때)
     const raidId = r.state.raid?.id ?? r.state.raidResult?.id;
-    const stage = r.state.raid?.stage ?? r.state.raidResult?.stage ?? 0;
-    if (raidId && stage === 0 && r.raidEvents.length) {
+    const firstTime = raidId !== undefined && !(prev?.raidClears[raidId] ?? 0);
+    if (raidId && firstTime && r.raidEvents.length) {
       const lines = r.raidEvents.flatMap((ev) => storyFor(ev, raidId, r.state.god) ?? []);
       if (lines.length) {
         storyRef.current = true;
@@ -192,6 +194,7 @@ export default function App() {
             onLeaveRaid={() => gameRef.current && apply(leaveRaid(gameRef.current))}
           />
           <SkillBar state={game} onCast={(id: SkillId) => gameRef.current && apply(castSkill(gameRef.current, id))} />
+          <DailyPanel state={game} onEnter={enterRaid} />
           <RaidPanel state={game} onEnter={enterRaid} />
           <SkillUpgradePanel state={game} onUpgrade={(id) => act((s) => upgradeSkill(s, id))} />
           <UpgradeList

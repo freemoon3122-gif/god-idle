@@ -36,6 +36,7 @@ export function storyFor(event: RaidEvent, raid: RaidId, god: GodId | null): Sto
           gaia('내 아이들 기간테스여! 올림포스를 무너뜨려라! 신의 힘만으로는 결코 너희를 죽일 수 없다!'),
           NARRATION('뱀의 다리를 가진 거인족 기간테스는 신의 손으로는 죽지 않는다. 그래서 신들은 인간 영웅을 불렀다.'),
           heracles('제 화살로 놈들에게 「필멸의 표식」을 새기겠습니다! 표식이 빛날 때 공격하세요!'),
+          NARRATION('거인들은 끝없이 몰려온다. 90초 동안 최대한 많은 피해를 입혀라!'),
           me(g === 'zeus' ? '좋다, 헤라클레스. 올림포스의 이름으로!' : '바다의 힘을 보여 주마. 가자, 헤라클레스!'),
         ];
       case 'boss':
@@ -55,11 +56,11 @@ export function storyFor(event: RaidEvent, raid: RaidId, god: GodId | null): Sto
           ? [
               NARRATION('포세이돈은 코스 섬의 한 조각을 뜯어내 폴리보테스에게 던졌다.'),
               NARRATION('거인을 깔아뭉갠 그 바위가 바로 오늘날의 「니시로스 섬」이다.'),
-              heracles('해냈습니다! 거인족이 모두 쓰러졌어요!'),
+              heracles('오늘은 여기까지! 내일 다시 거인들을 막으러 와 주세요!'),
             ]
           : [
               NARRATION('제우스의 번개가 포르피리온을 꿰뚫고, 헤라클레스의 화살이 마지막 숨을 끊었다.'),
-              heracles('해냈습니다! 거인족이 모두 쓰러졌어요!'),
+              heracles('오늘은 여기까지! 내일 다시 거인들을 막으러 와 주세요!'),
             ];
       default:
         return null;

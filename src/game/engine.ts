@@ -28,6 +28,9 @@ import {
 import {
   BREATH_INTERVAL,
   BREATH_DAMAGE,
+  DAILY_GOLD_PER_POINT,
+  dailyDiamonds,
+  dailyPhaseHp,
   BREATH_INTERVAL_ENRAGED,
   dayKey,
   defenseMultiplier,
@@ -625,7 +628,7 @@ function decreaseCooldowns(cds: GameState['skillCooldowns'], dt: number): GameSt
 export function raidUnlocked(s: GameState, id: RaidId): boolean {
   if (!s.god) return false;
   if (id === 'gigantomachy') return s.level >= GIGANTO_UNLOCK_LEVEL;
-  return s.level >= TYPHON_UNLOCK_LEVEL && (s.raidClears.gigantomachy ?? 0) > 0;
+  return s.level >= TYPHON_UNLOCK_LEVEL;
 }
 
 export function ticketsLeft(s: GameState, id: RaidId, now: number): number {
@@ -652,17 +655,22 @@ export function startRaid(state: GameState, id: RaidId, now: number): ActionResu
 
   const today = dayKey(now);
   const used = state.raidTickets.day === today ? state.raidTickets.used : {};
-  const stage = raidStage(state, id);
+  const daily = RAIDS[id].daily;
+  const stage = daily ? 0 : raidStage(state, id); // 일일 던전은 단계가 없다
   const phases = raidPhases(id, state.god);
   const godMaxHp = godRaidHp(state.level);
+  const refHp = averageDps(state); // 일일 던전의 점수·거인 체력 기준
   const raid: RaidState = {
     id,
     phase: 0,
-    monster: raidMonster(id, 0, state.god, stage),
+    monster: daily ? dailyMonster(state.god, refHp, 0, 0) : raidMonster(id, 0, state.god, stage),
     timeLeft: RAIDS[id].timeLimit,
     stage,
-    defense: raidDefense(stage),
-    attack: raidAttack(id, stage),
+    lap: 0,
+    kills: 0,
+    refHp,
+    defense: daily ? 0 : raidDefense(stage),
+    attack: daily ? 0 : raidAttack(id, stage), // 일일 던전에서는 거인이 신을 공격하지 않는다 (실패 없이 점수만)
     attackCooldown: RAID_ATTACK_INTERVAL,
     godHp: godMaxHp,
     godMaxHp,
@@ -713,6 +721,13 @@ function gimmickMultiplier(r: RaidState): number {
   return 1;
 }
 
+/** 일일 던전의 거인: 바퀴(lap)마다 체력 ×1.6. 이름에 바퀴 수를 붙인다 */
+function dailyMonster(god: GodId | null, refHp: number, lap: number, phase: number): Monster {
+  const p = raidPhases('gigantomachy', god)[phase];
+  const hp = dailyPhaseHp(refHp, lap, p);
+  return { kind: p.kind, name: lap > 0 ? `${p.name} (${lap + 1}번째)` : p.name, hp, maxHp: hp, isBoss: p.isBoss };
+}
+
 function raidMonster(id: RaidId, phase: number, god: GodId | null, stage: number): Monster {
   const p = raidPhases(id, god)[phase];
   const hp = raidPhaseHp(id, stage, p);
@@ -731,9 +746,9 @@ function raidTick(state: GameState, dt: number, result: ActionResult, rng: Rng):
 
   if (r.timeLeft <= 0) return finishRaid(s, false, result, rng);
 
-  // 적의 공격: 3초마다 신의 체력을 공격력만큼 깎는다. 0이 되면 쓰러져서 실패
+  // 적의 공격: 3초마다 신의 체력을 공격력만큼 깎는다. 0이 되면 쓰러져서 실패 (공격력 0이면 공격하지 않음)
   r.attackCooldown -= dt;
-  if (r.attackCooldown <= 0) {
+  if (r.attack > 0 && r.attackCooldown <= 0) {
     r.attackCooldown += RAID_ATTACK_INTERVAL;
     r.godHp -= r.attack;
     result.raidEvents.push('strike');
@@ -803,6 +818,13 @@ function hitRaid(state: GameState, hit: Hit, result: ActionResult, rng: Rng): Ga
   // 쓰러뜨렸다 → 다음 적, 또는 클리어
   result.killed = true;
   const phases = raidPhases(r.id, state.god);
+  if (RAIDS[r.id].daily) {
+    // 일일 던전: 끝없이 다음 거인. 왕까지 쓰러뜨리면 한 바퀴 더 (체력 ×1.6)
+    const phase = (r.phase + 1) % phases.length;
+    const lap = phase === 0 ? r.lap + 1 : r.lap;
+    if (phases[phase].isBoss && lap === 0) result.raidEvents.push('boss');
+    return { ...state, raid: { ...r, phase, lap, kills: r.kills + 1, monster: dailyMonster(state.god, r.refHp, lap, phase) } };
+  }
   if (r.phase + 1 < phases.length) {
     const phase = r.phase + 1;
     if (phases[phase].isBoss) result.raidEvents.push('boss');
@@ -815,6 +837,7 @@ function hitRaid(state: GameState, hit: Hit, result: ActionResult, rng: Rng): Ga
 function finishRaid(state: GameState, cleared: boolean, result: ActionResult, rng: Rng): GameState {
   const r = state.raid!;
   const info = RAIDS[r.id];
+  if (info.daily) return finishDaily(state, result);
   const damagePct = Math.min(1, r.totalDamage / r.totalHp);
   const rate = (cleared ? 1 : damagePct * 0.5) * Math.pow(REWARD_GROWTH, r.stage); // 높은 단계일수록 보상도 커진다
   const wave = Math.max(1, state.maxWave);
@@ -849,8 +872,54 @@ function finishRaid(state: GameState, cleared: boolean, result: ActionResult, rn
   result.diamonds += diamonds;
 
   const knockedOut = r.godHp <= 0;
-  const raidResult: RaidResult = { id: r.id, cleared, damagePct, stage: r.stage, knockedOut, gold, xp, weapon, unlockedSkill, diamonds, coins, firstClear };
+  const raidResult: RaidResult = { id: r.id, cleared, damagePct, stage: r.stage, knockedOut, gold, xp, weapon, unlockedSkill, diamonds, coins, firstClear, daily: null };
   result.raidEvents.push(cleared ? 'clear' : 'fail');
+  return { ...s, raidResult };
+}
+
+/**
+ * 일일 던전 종료 (시간이 다 되거나 나가기): 넣은 피해 총합으로 골드·다이아를 준다.
+ * 점수 = 피해 총합 ÷ 기준 체력. 첫 참전이면 신별 스킬도 해금.
+ */
+function finishDaily(state: GameState, result: ActionResult): GameState {
+  const r = state.raid!;
+  const points = r.totalDamage / r.refHp;
+  const wave = Math.max(1, state.maxWave);
+  const gold = Math.floor(monsterGold(wave, state.levels.gold) * points * DAILY_GOLD_PER_POINT);
+  const diamonds = dailyDiamonds(points);
+  const firstClear = !(state.raidClears[r.id] ?? 0);
+  let unlockedSkill: SkillId | null = null;
+  let s: GameState = {
+    ...state,
+    raid: null,
+    queuedHits: [],
+    bossBonusLeft: MAX_TIME_BONUS,
+    gold: state.gold + gold,
+    diamonds: state.diamonds + diamonds,
+    raidClears: { ...state.raidClears, [r.id]: (state.raidClears[r.id] ?? 0) + 1 }, // 참전 횟수
+  };
+  if (firstClear) {
+    unlockedSkill = gigantoRewardSkill(s.god);
+    if (unlockedSkill && !s.unlockedSkills.includes(unlockedSkill)) s.unlockedSkills = [...s.unlockedSkills, unlockedSkill];
+    else unlockedSkill = null;
+  }
+  result.diamonds += diamonds;
+  result.raidEvents.push('clear');
+  const raidResult: RaidResult = {
+    id: r.id,
+    cleared: true,
+    damagePct: 0,
+    stage: 0,
+    knockedOut: false,
+    gold,
+    xp: 0,
+    weapon: null,
+    unlockedSkill,
+    diamonds,
+    coins: 0,
+    firstClear,
+    daily: { damage: r.totalDamage, points, kills: r.kills },
+  };
   return { ...s, raidResult };
 }
 

@@ -17,7 +17,7 @@ import { Rarity } from './weapons';
 export interface RaidPhase {
   kind: string; // 스프라이트
   name: string;
-  hpScale: number; // 체력 = 그 단계의 기준 체력(같은 웨이브 일반 몬스터 체력) × 이 값
+  hpScale: number; // 레이드: 그 단계의 기준 체력(같은 웨이브 일반 몬스터 체력) × 이 값 / 일일 던전: 내 초당 피해 × 이 값(초)
   isBoss: boolean;
 }
 
@@ -32,6 +32,7 @@ export interface RaidInfo {
   xpReward: number;
   weaponTable: [Rarity, number][]; // 클리어 시 무기 등급 확률
   gimmicks: string[];
+  daily: boolean; // true = 일일 던전 (피해량으로 보상), false = 레이드 (단계 클리어)
 }
 
 export const RAIDS: Record<RaidId, RaidInfo> = {
@@ -39,9 +40,10 @@ export const RAIDS: Record<RaidId, RaidInfo> = {
     id: 'gigantomachy',
     name: '기간토마키아',
     emoji: '⚔️',
-    subtitle: '가이아의 거인족 기간테스와의 전쟁',
+    subtitle: '끝없이 몰려오는 거인족 기간테스와의 전쟁',
     timeLimit: 90_000,
-    ticketsPerDay: 3,
+    ticketsPerDay: 1,
+    daily: true,
     goldReward: 150,
     xpReward: 60,
     weaponTable: [
@@ -49,10 +51,11 @@ export const RAIDS: Record<RaidId, RaidInfo> = {
       ['legend', 0.4],
     ],
     gimmicks: [
+      '90초 동안 거인이 끝없이 몰려온다 (한 바퀴 돌 때마다 체력 ×1.6)',
       '불사의 거인: 평소에는 피해가 절반만 들어간다',
       '헤라클레스가 6초마다 화살을 쏜다 → 3초간 「필멸의 표식」: 피해 1.5배',
-      '첫 클리어: 제우스 「거인 사냥」 / 포세이돈 「니시로스 투척」',
-      '클리어할 때마다 단계가 올라 거인의 체력·공격력·방어력이 기하급수로 오른다',
+      '넣은 피해의 총합에 따라 골드와 💎 다이아 지급',
+      '첫 참전: 제우스 「거인 사냥」 / 포세이돈 「니시로스 투척」',
     ],
   },
   typhoeus: {
@@ -62,6 +65,7 @@ export const RAIDS: Record<RaidId, RaidInfo> = {
     subtitle: '괴물 중의 괴물, 수백 개의 뱀 머리',
     timeLimit: 120_000,
     ticketsPerDay: 3,
+    daily: false,
     goldReward: 400,
     xpReward: 150,
     weaponTable: [
@@ -78,10 +82,11 @@ export const RAIDS: Record<RaidId, RaidInfo> = {
   },
 };
 
-export const RAID_LIST: RaidInfo[] = Object.values(RAIDS);
+export const RAID_LIST: RaidInfo[] = Object.values(RAIDS).filter((r) => !r.daily); // 레이드 목록
+export const DAILY_LIST: RaidInfo[] = Object.values(RAIDS).filter((r) => r.daily); // 일일 던전 목록
 
 export const GIGANTO_UNLOCK_LEVEL = 3000; // 신이 되는 레벨
-export const TYPHON_UNLOCK_LEVEL = 5000;
+export const TYPHON_UNLOCK_LEVEL = 5000; // 티포에우스 레이드
 
 // 기간토마키아 기믹
 export const IMMORTAL_MULTIPLIER = 0.5;
@@ -104,11 +109,11 @@ export const STUN_DURATION = 1_200;
 export function raidPhases(id: RaidId, god: GodId | null): RaidPhase[] {
   if (id === 'gigantomachy') {
     return [
-      { kind: 'giant_spear', name: '기간테스 전사', hpScale: 15, isBoss: false },
-      { kind: 'giant_rock', name: '기간테스 투석병', hpScale: 15, isBoss: false },
+      { kind: 'giant_spear', name: '기간테스 전사', hpScale: 8, isBoss: false },
+      { kind: 'giant_rock', name: '기간테스 투석병', hpScale: 8, isBoss: false },
       god === 'poseidon'
-        ? { kind: 'polybotes', name: '바다의 거인 폴리보테스', hpScale: 70, isBoss: true }
-        : { kind: 'porphyrion', name: '거인의 왕 포르피리온', hpScale: 70, isBoss: true },
+        ? { kind: 'polybotes', name: '바다의 거인 폴리보테스', hpScale: 30, isBoss: true }
+        : { kind: 'porphyrion', name: '거인의 왕 포르피리온', hpScale: 30, isBoss: true },
     ];
   }
   return [{ kind: 'typhoeus', name: '티포에우스', hpScale: 50, isBoss: true }];
@@ -171,7 +176,27 @@ export function stageMultipliers(id: RaidId, stage: number) {
   };
 }
 
-/** 기간토마키아 첫 클리어로 얻는 신별 스킬 */
+// ───────────── 일일 던전 「기간토마키아」 ─────────────
+//
+// 점수 = 넣은 피해 총합 ÷ 입장할 때 내 초당 피해(전투력)
+//   = "평타만 쳤을 때 몇 초어치 피해를 넣었나". 스킬·표식 타이밍·터치를 잘할수록 오른다.
+// → 피해량 숫자는 지수로 커지지만 점수는 성장과 상관없이 비슷한 범위라 다이아가 폭주하지 않는다.
+//   골드는 최고 웨이브 기준이라 성장할수록 커진다.
+// 거인 체력도 같은 기준 (전사 8초, 투석병 8초, 왕 30초어치, 바퀴마다 ×1.6)
+export const DAILY_LAP_GROWTH = 1.6;
+export const DAILY_GOLD_PER_POINT = 0.5; // 골드 = 최고 웨이브 몬스터 골드 × 점수 × 0.5
+export const DAILY_DIAMONDS_PER_POINT = 0.2; // 점수 5점당 💎1
+export const DAILY_DIAMOND_CAP = 100; // 하루 최대 💎100
+
+export function dailyPhaseHp(refHp: number, lap: number, phase: RaidPhase): number {
+  return Math.ceil(refHp * phase.hpScale * Math.pow(DAILY_LAP_GROWTH, lap));
+}
+
+export function dailyDiamonds(points: number): number {
+  return Math.min(DAILY_DIAMOND_CAP, Math.floor(points * DAILY_DIAMONDS_PER_POINT));
+}
+
+/** 일일 던전 첫 참전으로 얻는 신별 스킬 */
 export function gigantoRewardSkill(god: GodId | null): SkillId | null {
   if (god === 'zeus') return 'zeus_gigas';
   if (god === 'poseidon') return 'poseidon_nisyros';
