@@ -5,13 +5,14 @@ import sys
 from PIL import Image
 
 PALETTE = {
-    'y': '#FFD54A', 'Y': '#C9971C', 's': '#FFDDC4', 'd': '#F2B391', 'S': '#C98B5E', 'b': '#2A2240',
+    'y': '#FFD54A', 'Y': '#C9971C', 's': '#FFDDC4', 'd': '#F2B391', 'S': '#B87A4E', 'b': '#2A2240',
     'w': '#FFFFFF', 'c': '#D5DDF0', 'g': '#C8C8D8', 'G': '#8A8AA0', 'p': '#FF9FB0', 'n': '#B5475A',
     'h': '#8B5A2B', 'H': '#5E3A1C', 'l': '#5CC46B', 'L': '#2F8A45', 'B': '#4C8DFF', 'F': '#B9C6E4',
     'W': '#F2F4FA', 'E': '#B4BDD3', 't': '#2BB3A3', 'T': '#16756B', 'A': '#7FE8DA', 'u': '#2D5FC0',
     'U': '#1B3C85', 'q': '#EEF3FB', 'Q': '#93A3C2', 'z': '#FFF27A', 'Z': '#FFA51F', 'x': '#6FE3FF',
-    'r': '#E5484D', 'v': '#9B6BFF', 'V': '#6A3FCF', 'm': '#5CD67A', 'M': '#2F9E4F', 'k': '#DDE6FF',
-    'o': '#7A4A26', 'R': '#B8323A', 'O': '#3D2A55',
+    'r': '#E5484D', 'v': '#7A4FC8', 'V': '#4A2A8C', 'm': '#6CC24A', 'M': '#2E7A2A', 'k': '#DDE6FF',
+    'o': '#7A4A26', 'R': '#B8323A', 'O': '#3D2A55', 'i': '#5B7A99', 'I': '#3E5772',
+    'a': '#B8F27C', 'j': '#2A1238', 'e': '#FF2E2E', 'f': '#6F7385', 'D': '#41434F', 'K': '#7A4A26', 'P': '#7C6FA8', 'X': '#8E5A37',
 }
 OUTLINE = '#1C1430'
 

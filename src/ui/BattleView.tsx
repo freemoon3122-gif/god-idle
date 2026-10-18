@@ -8,6 +8,7 @@ import { RARITY_INFO, WEAPONS } from '../game/weapons';
 import Svg, { Circle, Defs, RadialGradient, Stop } from 'react-native-svg';
 
 import { Effect, EffectSpec, EffectView } from './effects';
+import { FLOAT_CELLS, heroLayout, HeroSprite } from './HeroSprite';
 import { PixelSprite, spriteSize } from './PixelSprite';
 import { heroSprite, skyColors } from './sprites';
 import { colors } from './theme';
@@ -17,6 +18,7 @@ const HEIGHT = 330;
 const GROUND = 34; // 바닥 높이
 const SIDE = 26; // 좌우 여백
 const HERO_SCALE = 4; // 신 스프라이트는 약 24×26칸 → 약 100pt
+const MOUNTED_SCALE = 3.5; // 탈것(구름·상어)을 타면 폭이 넓어지므로 조금 작게
 const MAX_EFFECTS = 70;
 
 /** 부모(App)가 전투 결과를 넘겨 연출을 재생하게 하는 통로 */
@@ -59,15 +61,18 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
   const aura = useRef(new Animated.Value(0)).current;
 
   const hero = heroSprite(state);
-  const heroSize = spriteSize(hero, HERO_SCALE);
-  const monsterScale = state.monster.isBoss ? 6 : 4;
+  const heroScale = state.god ? MOUNTED_SCALE : HERO_SCALE;
+  const heroSize = heroLayout(hero, heroScale); // 탈것(구름·상어)까지 포함한 크기
+  const heroBodyH = spriteSize(hero, heroScale).h;
+  const heroFloat = heroSize.floating ? FLOAT_CELLS * heroScale : 0; // 탈것을 타면 살짝 떠 있다
+  const monsterScale = state.monster.isBoss ? 5 : 4;
   const monsterSize = spriteSize(state.monster.kind, monsterScale);
 
   // 좌표 계산 (전투 영역 기준)
   const pos = useRef({ heroX: 0, heroY: 0, monX: 0, monY: 0, monTop: 0, groundY: 0 });
   pos.current = {
     heroX: SIDE + heroSize.w * 0.75,
-    heroY: HEIGHT - GROUND - heroSize.h * 0.6,
+    heroY: HEIGHT - GROUND - heroFloat - heroSize.h + heroBodyH * 0.5, // 신의 가슴 높이에서 공격이 나간다
     monX: width - SIDE - monsterSize.w / 2,
     monY: HEIGHT - GROUND - monsterSize.h / 2,
     monTop: HEIGHT - GROUND - monsterSize.h,
@@ -427,7 +432,7 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
           style={{
             position: 'absolute',
             left: SIDE,
-            bottom: GROUND,
+            bottom: GROUND + heroFloat,
             transform: [{ translateX: dash }, { translateY: bob.interpolate({ inputRange: [0, 1], outputRange: [0, -6] }) }],
           }}
         >
@@ -458,7 +463,7 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
               </Svg>
             </Animated.View>
           )}
-          <PixelSprite name={hero} scale={HERO_SCALE} />
+          <HeroSprite name={hero} scale={heroScale} />
         </Animated.View>
 
         {/* 몬스터 */}

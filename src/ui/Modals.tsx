@@ -4,6 +4,7 @@ import { GODS, SKILLS } from '../game/balance';
 import { OfflineReward } from '../game/engine';
 import { formatNumber } from '../game/format';
 import { GodId } from '../game/types';
+import { HeroSprite } from './HeroSprite';
 import { PixelSprite } from './PixelSprite';
 import { colors } from './theme';
 
@@ -73,7 +74,7 @@ export function GodChoiceModal({ visible, onChoose }: { visible: boolean; onChoo
               accessibilityRole="button"
               style={({ pressed }) => [styles.god, pressed && { borderColor: colors.gold }]}
             >
-              <PixelSprite name={id} scale={4} />
+              <HeroSprite name={id} scale={3} />
               <Text style={styles.godName}>
                 {god.emoji} {god.name}
               </Text>

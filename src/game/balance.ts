@@ -86,11 +86,11 @@ export function monsterGold(wave: number, goldLevel: number): number {
 
 /** 스테이지마다 등장하는 몬스터가 바뀐다. 마지막 종류 이후로는 반복된다. */
 export const MONSTER_KINDS = [
-  { kind: 'slime', name: '슬라임' },
-  { kind: 'bat', name: '박쥐' },
-  { kind: 'skeleton', name: '해골 병사' },
-  { kind: 'ghost', name: '유령' },
-  { kind: 'cyclops', name: '키클롭스' },
+  { kind: 'slime', name: '독 슬라임' },
+  { kind: 'bat', name: '흡혈 박쥐' },
+  { kind: 'skeleton', name: '해골 전사' },
+  { kind: 'ghost', name: '원령' },
+  { kind: 'cyclops', name: '분노한 키클롭스' },
 ];
 
 export function monsterKindFor(wave: number) {
