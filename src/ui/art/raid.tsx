@@ -97,10 +97,10 @@ function gigasDefs(id: string, hair: [string, string]) {
 function gigasLegs(p: Paint, id: string) {
   return (
     <G>
-      <Tube p={p} d="M96 182 C60 188 22 202 22 230 C22 252 40 260 62 254" w={26} {...G_SNAKE} />
-      <Tube p={p} d="M104 182 C140 188 178 202 178 230 C178 252 160 260 138 254" w={26} {...G_SNAKE} />
-      <SerpentHead p={p} x={64} y={252} s={0.62} rot={-12} skin="#6E9E4E" dark="#2F4F24" />
-      <SerpentHead p={p} x={136} y={252} s={0.62} rot={12} flip skin="#6E9E4E" dark="#2F4F24" />
+      <Tube p={p} d="M96 182 C60 188 18 200 20 232 C22 258 46 264 62 252" w={26} {...G_SNAKE} />
+      <Tube p={p} d="M104 182 C140 188 182 200 180 232 C178 258 154 264 138 252" w={26} {...G_SNAKE} />
+      <SerpentHead p={p} x={62} y={250} s={0.8} rot={-34} skin="#86BC5E" dark="#3D6430" />
+      <SerpentHead p={p} x={138} y={250} s={0.8} rot={34} flip skin="#86BC5E" dark="#3D6430" />
       <Shape p={p} d="M50 180 C50 166 150 166 150 180 C150 196 128 200 100 200 C72 200 50 196 50 180 Z" fill={p.grad(`${id}-hip`)} />
     </G>
   );
@@ -156,6 +156,23 @@ function gigasHead(p: Paint, id: string) {
     </G>
   );
 }
+
+/** 가리비 껍데기 방패 (폴리보테스 왼손). 경첩 (55,226)에서 부채꼴로 퍼진 물결 테두리 + 골 */
+const SHELL = (() => {
+  const cx = 55, cy = 226, rx = 48, ry = 84, n = 7;
+  const pt = (deg: number, k: number) => {
+    const a = (deg * Math.PI) / 180;
+    return `${(cx + rx * k * Math.cos(a)).toFixed(1)} ${(cy + ry * k * Math.sin(a)).toFixed(1)}`;
+  };
+  const ang = (i: number) => 200 + (140 * i) / n;
+  let outline = `M${cx} ${cy} L${pt(ang(0), 1)}`;
+  let ribs = '';
+  for (let i = 0; i < n; i++) {
+    outline += ` Q${pt((ang(i) + ang(i + 1)) / 2, 1.13)} ${pt(ang(i + 1), 1)}`;
+    if (i > 0) ribs += ` M${cx} ${cy - 6} L${pt(ang(i), 0.9)}`;
+  }
+  return { outline: outline + ' Z', ribs };
+})();
 
 // ───────────── 그림들 ─────────────
 
@@ -238,8 +255,265 @@ export const RAID_ART: Record<string, ArtDef> = {
       </G>
     ),
   },
-};
+  // 거인의 왕 포르피리온: 왕관, 풍성한 수염, 붉은 망토, 황금 어깨갑옷, 거대한 양날 도끼
+  porphyrion: {
+    w: 37,
+    h: 34,
+    defs: () => (
+      <>
+        <Ball id="porphyrion-skin" light="#C8D488" base="#86915A" dark="#434E26" />
+        <VGrad id="porphyrion-torso" from="#ADBA74" to="#56602F" />
+        <VGrad id="porphyrion-hair" from="#6A4224" to="#1E0F06" />
+        <VGrad id="porphyrion-gold" from="#FFF3A6" mid="#FFD54A" to="#B07A12" />
+        <Ball id="porphyrion-plate" light="#FFF6C0" base="#F2C23A" dark="#94600E" />
+        <VGrad id="porphyrion-cape" from="#E8505A" to="#6E1020" />
+        <VGrad id="porphyrion-blade" from="#FFFFFF" mid="#C6D0E4" to="#6E7C9E" />
+        <VGrad id="porphyrion-mouth" from="#3A0F2E" to="#120612" />
+        <Ball id="porphyrion-hip" light="#8CC068" base="#4F7A3A" dark="#2A4420" />
+        <LinearGradient id="porphyrion-wood" x1="0" y1="0" x2="1" y2="0">
+          <Stop offset="0" stopColor="#B07A44" />
+          <Stop offset="1" stopColor="#4E2E14" />
+        </LinearGradient>
+      </>
+    ),
+    draw: (p) => (
+      <G>
+        {/* 양날 도끼 (몸 뒤) */}
+        <Shape p={p} d="M279 70 L291 70 L291 304 L279 304 Z" fill={p.grad('porphyrion-wood')} lw={6} />
+        <Circle cx={285} cy={308} r={9} fill={p.grad('porphyrion-gold')} stroke={p.line} strokeWidth={5} />
+        <Shape p={p} d="M285 4 L295 38 L275 38 Z" fill={p.grad('porphyrion-blade')} lw={6} />
+        <Shape p={p} d="M292 30 C326 16 360 44 360 68 C360 92 326 118 292 104 C300 80 300 54 292 30 Z" fill={p.grad('porphyrion-blade')} />
+        <Shape p={p} d="M278 40 C254 32 226 50 224 68 C226 86 254 102 278 94 C272 76 272 58 278 40 Z" fill={p.grad('porphyrion-blade')} />
+        {!p.tinted && <Path d="M326 30 C352 46 354 88 326 106 M246 44 C230 56 230 80 246 92" stroke={p.fill('#FFFFFF')} strokeWidth={4} opacity={0.7} fill="none" strokeLinecap="round" />}
+        <Shape p={p} d="M272 30 L298 30 L298 106 L272 106 Z" fill={p.grad('porphyrion-gold')} lw={6} />
+        <Circle cx={285} cy={68} r={7} fill={p.fill('#FF2E2E')} stroke={p.line} strokeWidth={4} />
+        {/* 붉은 망토 */}
+        <Shape p={p} d="M54 146 L246 146 C266 180 272 220 270 264 C256 254 244 268 228 258 L72 258 C56 268 44 254 30 264 C28 220 34 180 54 146 Z" fill={p.grad('porphyrion-cape')} />
+        {/* 뒷머리 갈기 */}
+        <Shape p={p} d="M150 22 C192 20 228 38 234 76 C242 110 238 140 224 160 L76 160 C62 140 58 110 66 76 C72 38 108 20 150 22 Z" fill={p.grad('porphyrion-hair')} />
+        {/* 뱀 다리 */}
+        <Tube p={p} d="M126 246 C84 252 38 266 38 298 C38 324 66 332 84 316" w={32} {...G_SNAKE} />
+        <Tube p={p} d={mx('M126 246 C84 252 38 266 38 298 C38 324 66 332 84 316', 150)} w={32} {...G_SNAKE} />
+        <SerpentHead p={p} x={84} y={314} s={1} rot={-34} skin="#86BC5E" dark="#3D6430" />
+        <SerpentHead p={p} x={216} y={314} s={1} rot={34} flip skin="#86BC5E" dark="#3D6430" />
+        <Shape p={p} d="M84 246 C84 230 216 230 216 246 C216 264 186 270 150 270 C114 270 84 264 84 246 Z" fill={p.grad('porphyrion-hip')} />
+        {/* 팔 */}
+        <Tube p={p} d="M50 170 C40 190 36 204 38 222" w={30} color="#86915A" dark="#434E26" light="#C8D488" />
+        <Tube p={p} d="M248 168 C264 188 276 192 284 178" w={30} color="#86915A" dark="#434E26" light="#C8D488" />
+        {/* 몸통 */}
+        <Shape p={p} d="M58 150 C100 138 200 138 242 150 C258 160 258 186 246 198 C240 210 232 220 222 230 L78 230 C68 220 60 210 54 198 C42 186 42 160 58 150 Z" fill={p.grad('porphyrion-torso')} />
+        <Path d="M150 186 L150 206 M132 196 L145 197 M155 197 L168 196" stroke={p.fill('#434E26')} strokeWidth={4} strokeLinecap="round" fill="none" />
+        {/* 황금 허리띠 + 붉은 앞가리개 */}
+        <Shape p={p} d="M100 228 L200 228 L194 262 L172 252 L150 266 L128 252 L106 262 Z" fill={p.grad('porphyrion-cape')} lw={6} />
+        <Shape p={p} d="M70 206 L230 206 L226 232 L74 232 Z" fill={p.grad('porphyrion-gold')} lw={6} />
+        <Path d="M96 219 L96 219 M120 219 L120 219 M180 219 L180 219 M204 219 L204 219" stroke={p.fill('#94600E')} strokeWidth={7} strokeLinecap="round" />
+        <Shape p={p} d="M150 206 L164 219 L150 234 L136 219 Z" fill={p.fill('#6FE3FF')} lw={5} />
+        <Shine p={p} cx={146} cy={214} rx={4} ry={2.5} opacity={0.9} />
+        {/* 주먹 */}
+        <Shape p={p} d="M20 230 C20 216 32 210 42 212 C54 214 58 228 52 240 C46 250 26 248 20 230 Z" fill={p.grad('porphyrion-skin')} lw={6} />
+        <Shape p={p} d="M270 166 C272 154 298 154 300 166 L300 190 C298 200 272 200 270 190 Z" fill={p.grad('porphyrion-skin')} lw={6} />
+        <Path d="M272 174 L298 174 M272 183 L298 183" stroke={p.line} strokeWidth={3.5} strokeLinecap="round" />
+        {/* 황금 어깨갑옷 */}
+        <Shape p={p} d="M40 134 L30 112 L54 128 Z M66 130 L66 106 L80 132 Z" fill={p.grad('porphyrion-gold')} lw={5} />
+        <Shape p={p} d={mx('M40 134 L30 112 L54 128 Z M66 130 L66 106 L80 132 Z', 150)} fill={p.grad('porphyrion-gold')} lw={5} />
+        <Shape p={p} d="M20 172 C14 146 40 128 66 132 C90 136 100 156 94 174 C72 168 44 168 20 172 Z" fill={p.grad('porphyrion-plate')} />
+        <Shape p={p} d={mx('M20 172 C14 146 40 128 66 132 C90 136 100 156 94 174 C72 168 44 168 20 172 Z', 150)} fill={p.grad('porphyrion-plate')} />
+        <Circle cx={60} cy={154} r={7} fill={p.fill('#E5484D')} stroke={p.line} strokeWidth={4} />
+        <Circle cx={240} cy={154} r={7} fill={p.fill('#E5484D')} stroke={p.line} strokeWidth={4} />
+        <Shine p={p} cx={44} cy={146} rx={10} ry={5} opacity={0.6} />
+        {/* 머리 */}
+        <Shape p={p} d="M92 76 L62 58 L70 90 C74 100 86 102 92 98 Z" fill={p.fill('#86915A')} lw={6} />
+        <Shape p={p} d={mx('M92 76 L62 58 L70 90 C74 100 86 102 92 98 Z', 150)} fill={p.fill('#86915A')} lw={6} />
+        <Shape p={p} d="M90 60 C90 38 116 30 150 30 C184 30 210 38 210 60 L212 92 C212 116 186 128 150 128 C114 128 88 116 88 92 Z" fill={p.grad('porphyrion-skin')} />
+        <Ellipse cx={126} cy={82} rx={15} ry={9} fill={p.fill('#2A1238')} />
+        <Ellipse cx={174} cy={82} rx={15} ry={9} fill={p.fill('#2A1238')} />
+        <GlowEye p={p} cx={127} cy={83} rx={9} ry={6} color="#FF2E2E" core="#FFD0C0" rot={12} />
+        <GlowEye p={p} cx={173} cy={83} rx={9} ry={6} color="#FF2E2E" core="#FFD0C0" rot={-12} />
+        <Shape p={p} d="M102 66 C118 62 136 68 148 78 L145 85 C132 78 118 76 104 76 Z" fill={p.grad('porphyrion-hair')} lw={5} />
+        <Shape p={p} d={mx('M102 66 C118 62 136 68 148 78 L145 85 C132 78 118 76 104 76 Z', 150)} fill={p.grad('porphyrion-hair')} lw={5} />
+        <Path d="M142 84 C140 90 136 94 140 97 C145 100 155 100 160 97 C164 94 160 90 158 84" stroke={p.line} strokeWidth={4} fill="none" strokeLinecap="round" />
+        {/* 풍성한 수염 */}
+        <Shape p={p} d="M90 94 C96 112 110 120 122 118 C134 120 142 116 150 118 C158 116 166 120 178 118 C190 120 204 112 210 94 C218 122 214 152 200 170 C190 182 182 174 172 188 C164 178 158 194 150 182 C142 194 136 178 128 188 C118 174 110 182 100 170 C86 152 82 122 90 94 Z" fill={p.grad('porphyrion-hair')} />
+        {!p.tinted && <Path d="M112 136 C114 150 118 160 122 168 M136 140 C136 154 138 166 140 176 M164 140 C164 154 162 166 160 176 M188 136 C186 150 182 160 178 168" stroke={p.fill('#8A5A32')} strokeWidth={3} opacity={0.8} fill="none" strokeLinecap="round" />}
+        <Shape p={p} d="M124 106 Q150 102 176 106 Q170 124 150 124 Q130 124 124 106 Z" fill={p.grad('porphyrion-mouth')} lw={5} />
+        <Path d="M130 107 L135 114 L140 106 L145 114 L150 105 L155 114 L160 106 L165 114 L170 107 Z" fill={p.fill('#F4F1E6')} />
+        <Shape p={p} d="M116 104 C128 94 142 96 150 101 C158 96 172 94 184 104 C176 110 162 108 150 105 C138 108 124 110 116 104 Z" fill={p.grad('porphyrion-hair')} lw={5} />
+        {/* 왕관 */}
+        <Shape p={p} d="M102 56 L98 18 L116 34 L127 10 L139 32 L150 6 L161 32 L173 10 L184 34 L202 18 L198 56 Z" fill={p.grad('porphyrion-gold')} />
+        {[98, 127, 150, 173, 202].map((x, i) => (
+          <Circle key={i} cx={x} cy={[18, 10, 6, 10, 18][i]} r={5} fill={p.fill('#FFF27A')} stroke={p.line} strokeWidth={4} />
+        ))}
+        <Shape p={p} d="M100 42 C130 38 170 38 200 42 L200 58 C170 54 130 54 100 58 Z" fill={p.fill('#C9971C')} lw={5} />
+        <Ellipse cx={150} cy={49} rx={8} ry={7} fill={p.fill('#FF2E2E')} stroke={p.line} strokeWidth={4} />
+        <Circle cx={122} cy={50} r={5} fill={p.fill('#6FE3FF')} stroke={p.line} strokeWidth={3.5} />
+        <Circle cx={178} cy={50} r={5} fill={p.fill('#6FE3FF')} stroke={p.line} strokeWidth={3.5} />
+        <Shine p={p} cx={116} cy={30} rx={4} ry={10} opacity={0.6} rotate={20} />
+      </G>
+    ),
+  },
 
-// 큰 보스들은 아래에서 이어서 추가
-Object.assign(RAID_ART, {} as Record<string, ArtDef>);
-export type _Unused = ReactNode;
+  // 바다의 거인 폴리보테스: 푸른 피부, 해초 머리, 산호 왕관, 지느러미 귀, 가리비 방패
+  polybotes: {
+    w: 28,
+    h: 32,
+    defs: () => (
+      <>
+        <Ball id="polybotes-skin" light="#A6D4F4" base="#4F86B8" dark="#22436A" />
+        <VGrad id="polybotes-torso" from="#82B4DE" to="#2A527C" />
+        <VGrad id="polybotes-weed" from="#5CB04A" to="#1A521C" />
+        <Ball id="polybotes-shell" light="#FFE6EC" base="#FF9FB0" dark="#C0506C" />
+        <VGrad id="polybotes-mouth" from="#0F2A3A" to="#060E16" />
+        <VGrad id="polybotes-belt" from="#8AA6C0" to="#3E5772" />
+        <Ball id="polybotes-hip" light="#5E8EC4" base="#2F5A85" dark="#16305A" />
+      </>
+    ),
+    draw: (p) => (
+      <G>
+        {/* 뒷머리 (해초) */}
+        <Shape p={p} d="M150 34 C186 32 214 44 220 70 C228 92 222 112 232 136 C220 132 216 142 208 134 L92 134 C84 142 80 132 68 136 C78 112 72 92 80 70 C86 44 114 32 150 34 Z" fill={p.grad('polybotes-weed')} />
+        {/* 뱀 다리 (짙은 바다색) */}
+        <Tube p={p} d="M120 228 C82 236 46 248 46 276 C46 300 72 306 88 294" w={28} color="#2F5A85" dark="#16305A" light="#6E9CD0" band="#1E4272" />
+        <Tube p={p} d={mx('M120 228 C82 236 46 248 46 276 C46 300 72 306 88 294', 145)} w={28} color="#2F5A85" dark="#16305A" light="#6E9CD0" band="#1E4272" />
+        <SerpentHead p={p} x={88} y={292} s={0.85} rot={-34} skin="#4F86B8" dark="#1B3C85" />
+        <SerpentHead p={p} x={202} y={292} s={0.85} rot={34} flip skin="#4F86B8" dark="#1B3C85" />
+        <Shape p={p} d="M80 224 C80 208 210 208 210 224 C210 242 180 248 145 248 C110 248 80 242 80 224 Z" fill={p.grad('polybotes-hip')} />
+        {/* 팔 */}
+        <Tube p={p} d="M58 158 C46 172 46 182 52 194" w={26} color="#4F86B8" dark="#22436A" />
+        <Tube p={p} d="M232 158 C246 176 250 192 248 208" w={26} color="#4F86B8" dark="#22436A" light="#A6D4F4" />
+        {/* 몸통 */}
+        <Shape p={p} d="M56 146 C92 132 198 132 234 146 C250 154 252 178 242 190 C236 200 230 208 222 216 L68 216 C60 208 54 200 48 190 C38 178 40 154 56 146 Z" fill={p.grad('polybotes-torso')} />
+        <Path d="M104 162 Q124 176 142 164 M148 164 Q166 176 186 162 M145 168 L145 194 M132 182 L141 183 M149 183 L158 182" stroke={p.fill('#22436A')} strokeWidth={4} strokeLinecap="round" fill="none" />
+        <Ellipse cx={58} cy={150} rx={22} ry={20} fill={p.grad('polybotes-skin')} stroke={p.line} strokeWidth={LW} />
+        <Ellipse cx={232} cy={150} rx={22} ry={20} fill={p.grad('polybotes-skin')} stroke={p.line} strokeWidth={LW} />
+        {/* 어깨의 따개비 + 늘어진 해초 */}
+        <Circle cx={222} cy={142} r={5} fill={p.fill('#E8E2D0')} stroke={p.line} strokeWidth={3} />
+        <Circle cx={236} cy={136} r={4} fill={p.fill('#E8E2D0')} stroke={p.line} strokeWidth={3} />
+        <Tube p={p} d="M208 136 C220 152 236 146 244 164 C250 176 242 186 250 200" w={8} color="#3E9A3A" lw={4} />
+        {/* 상어가죽 허리띠 + 상어 이빨 장식 */}
+        <Shape p={p} d="M66 194 L224 194 L222 218 L68 218 Z" fill={p.grad('polybotes-belt')} lw={6} />
+        <Path d={Array.from({ length: 8 }, (_, i) => `M${84 + i * 18} 200 L${90 + i * 18} 214 L${96 + i * 18} 200 Z`).join(' ')} fill={p.fill('#F4F1E6')} stroke={p.line} strokeWidth={2.5} strokeLinejoin="round" />
+        {/* 오른 주먹 */}
+        <Shape p={p} d="M232 216 C232 204 242 198 252 200 C264 202 266 216 260 226 C254 234 236 232 232 216 Z" fill={p.grad('polybotes-skin')} lw={6} />
+        {/* 가리비 방패 */}
+        <Shape p={p} d={SHELL.outline} fill={p.grad('polybotes-shell')} />
+        <Path d={SHELL.ribs} stroke={p.fill('#B5475A')} strokeWidth={4} strokeLinecap="round" fill="none" />
+        <Shape p={p} d="M36 220 L74 220 L70 236 L40 236 Z" fill={p.fill('#E07890')} lw={5} />
+        <Shine p={p} cx={36} cy={168} rx={12} ry={6} opacity={0.6} rotate={-50} />
+        {/* 지느러미 귀 */}
+        <Shape p={p} d="M94 80 L60 62 L70 78 L58 88 L72 94 L64 106 L94 102 Z" fill={p.fill('#3E78AE')} lw={5} />
+        <Shape p={p} d={mx('M94 80 L60 62 L70 78 L58 88 L72 94 L64 106 L94 102 Z', 150)} fill={p.fill('#3E78AE')} lw={5} />
+        {/* 얼굴 */}
+        <Shape p={p} d="M92 66 C92 46 118 40 150 40 C182 40 208 46 208 66 L210 96 C210 118 184 128 150 128 C116 128 90 118 90 96 Z" fill={p.grad('polybotes-skin')} />
+        <Path d="M100 96 Q107 102 104 110 M108 94 Q115 100 112 108 M200 96 Q193 102 196 110 M192 94 Q185 100 188 108" stroke={p.fill('#22436A')} strokeWidth={3.5} strokeLinecap="round" fill="none" />
+        <Ellipse cx={126} cy={86} rx={15} ry={9} fill={p.fill('#0F1E30')} />
+        <Ellipse cx={174} cy={86} rx={15} ry={9} fill={p.fill('#0F1E30')} />
+        <GlowEye p={p} cx={127} cy={87} rx={9} ry={6} color="#6FE3FF" core="#F0FFFF" rot={12} />
+        <GlowEye p={p} cx={173} cy={87} rx={9} ry={6} color="#6FE3FF" core="#F0FFFF" rot={-12} />
+        <Shape p={p} d="M102 70 C118 66 136 72 148 82 L145 89 C132 82 118 80 104 80 Z" fill={p.fill('#1E3A60')} lw={5} />
+        <Shape p={p} d={mx('M102 70 C118 66 136 72 148 82 L145 89 C132 82 118 80 104 80 Z', 150)} fill={p.fill('#1E3A60')} lw={5} />
+        <Path d="M144 94 L141 101 M156 94 L159 101" stroke={p.line} strokeWidth={4} strokeLinecap="round" />
+        {/* 상어 이빨 입 */}
+        <Shape p={p} d="M116 106 Q150 102 184 106 Q178 126 150 126 Q122 126 116 106 Z" fill={p.grad('polybotes-mouth')} lw={5} />
+        <Path d="M122 107 L127 115 L133 106 L139 115 L145 105 L150 114 L155 105 L161 115 L167 106 L173 115 L178 107 Z" fill={p.fill('#F4F1E6')} />
+        <Path d="M128 124 L133 116 L138 124 Z M162 124 L167 116 L172 124 Z" fill={p.fill('#F4F1E6')} />
+        {/* 해초 턱수염 + 앞머리 */}
+        <Shape p={p} d="M124 124 C128 138 136 134 140 146 C146 136 154 136 160 146 C164 134 172 138 176 124 C166 130 134 130 124 124 Z" fill={p.grad('polybotes-weed')} lw={5} />
+        <Shape p={p} d="M88 78 C90 56 114 42 150 42 C186 42 210 56 212 78 C204 70 198 74 192 62 C184 70 174 64 166 58 C158 66 146 64 138 58 C130 66 122 64 114 62 C106 72 96 68 88 78 Z" fill={p.grad('polybotes-weed')} lw={6} />
+        <Tube p={p} d="M80 128 C70 142 84 152 72 170" w={8} color="#3E9A3A" lw={4} />
+        <Tube p={p} d={mx('M80 128 C70 142 84 152 72 170', 150)} w={8} color="#3E9A3A" lw={4} />
+        {/* 산호 왕관 */}
+        <Tube p={p} d="M150 44 L150 12 M150 30 L136 18 M150 22 L162 10 M124 48 L116 26 L106 14 M117 30 L128 16 M176 48 L184 26 L194 14 M183 30 L172 16" w={9} color="#E5484D" dark="#A0283A" light="#FFB0B0" lw={5} />
+        <Shine p={p} cx={112} cy={56} rx={10} ry={4} opacity={0.35} />
+      </G>
+    ),
+  },
+
+  // 티포에우스: 여러 뱀 머리가 솟은 폭풍의 거신. 뿔, 불타는 눈, 불을 머금은 아가리, 황금 배비늘, 똬리 꼬리
+  typhoeus: {
+    w: 45,
+    h: 38,
+    defs: () => (
+      <>
+        <Ball id="typhoeus-head" light="#F08088" base="#A83A46" dark="#4A1220" />
+        <VGrad id="typhoeus-torso" from="#C44E5A" to="#4E1624" />
+        <VGrad id="typhoeus-gold" from="#FFF3A6" mid="#FFD54A" to="#B07A12" />
+        <VGrad id="typhoeus-horn" from="#F0EEF6" mid="#A8A8BC" to="#3E3E52" />
+        <VGrad id="typhoeus-mouth" from="#5A0F1E" to="#1A0408" />
+        <LinearGradient id="typhoeus-fire" x1="0" y1="1" x2="0" y2="0">
+          <Stop offset="0" stopColor="#FFF27A" />
+          <Stop offset="0.5" stopColor="#FFB030" />
+          <Stop offset="1" stopColor="#FF4A1F" />
+        </LinearGradient>
+      </>
+    ),
+    draw: (p) => {
+      const neck = { color: '#A83A46', dark: '#561A28', light: '#F08088', band: '#7A2232' };
+      // 왼쪽 목 세 개 (오른쪽은 좌우 반사)
+      const necks: { d: string; w: number; x: number; y: number; rot: number; s: number }[] = [
+        { d: 'M150 200 C110 204 54 200 58 166 C60 146 72 134 62 120', w: 26, x: 62, y: 120, rot: 40, s: 0.95 },
+        { d: 'M160 190 C130 170 96 150 100 112 C102 92 98 78 88 66', w: 24, x: 88, y: 66, rot: 56, s: 0.9 },
+        { d: 'M178 180 C162 150 144 122 144 94 C144 78 140 66 134 58', w: 22, x: 134, y: 58, rot: 74, s: 0.85 },
+      ];
+      const heads = (side: 'L' | 'R'): ReactNode =>
+        necks.map((n, i) => (
+          <G key={side + i}>
+            <Tube p={p} d={side === 'L' ? n.d : mx(n.d, 225)} w={n.w} {...neck} />
+            <SerpentHead p={p} x={side === 'L' ? n.x : 450 - n.x} y={n.y} s={n.s} rot={side === 'L' ? n.rot : -n.rot} flip={side === 'L'} skin="#B8404C" dark="#561A28" eye="#FFB030" horns />
+          </G>
+        ));
+      return (
+        <G>
+          {/* 똬리 꼬리 */}
+          <Tube p={p} d="M200 262 C120 262 34 276 34 318 C34 354 130 364 230 362 C330 360 412 346 412 312 C412 290 400 272 384 262" w={46} {...neck} />
+          <Tube p={p} d="M386 264 C376 256 368 248 360 240" w={30} {...neck} />
+          <Shape p={p} d="M372 254 C362 238 350 226 334 216 C358 214 380 224 392 244 Z" fill={p.fill('#561A28')} lw={6} />
+          {/* 뱀 목·머리들 */}
+          {heads('L')}
+          {heads('R')}
+          {/* 팔 */}
+          <Tube p={p} d="M128 204 C100 214 84 232 80 252" w={30} {...neck} band={undefined} />
+          <Tube p={p} d={mx('M128 204 C100 214 84 232 80 252', 225)} w={30} {...neck} band={undefined} />
+          {/* 몸통 + 황금 배비늘 */}
+          <Shape p={p} d="M118 186 C160 166 290 166 332 186 C352 196 356 222 342 238 C332 252 318 262 302 272 L148 272 C132 262 118 252 108 238 C94 222 98 196 118 186 Z" fill={p.grad('typhoeus-torso')} />
+          <Path d="M124 214 Q132 222 140 214 M120 232 Q128 240 136 232 M310 214 Q318 222 326 214 M314 232 Q322 240 330 232" stroke={p.fill('#4A1220')} strokeWidth={3.5} fill="none" strokeLinecap="round" />
+          <Shape p={p} d="M182 182 L268 182 C276 212 272 246 262 274 L188 274 C178 246 174 212 182 182 Z" fill={p.grad('typhoeus-gold')} />
+          <Path d="M180 206 C205 214 245 214 270 206 M180 230 C205 238 245 238 270 230 M184 254 C206 262 244 262 266 254" stroke={p.fill('#9A6A10')} strokeWidth={4} fill="none" strokeLinecap="round" />
+          <Shine p={p} cx={198} cy={196} rx={10} ry={5} opacity={0.6} />
+          {/* 발톱 손 */}
+          <Shape p={p} d="M64 262 L58 282 L72 268 Z M78 268 L78 288 L88 268 Z M90 262 L100 278 L98 256 Z" fill={p.fill('#F4F1E6')} lw={4} />
+          <Shape p={p} d={mx('M64 262 L58 282 L72 268 Z M78 268 L78 288 L88 268 Z M90 262 L100 278 L98 256 Z', 225)} fill={p.fill('#F4F1E6')} lw={4} />
+          <Shape p={p} d="M60 254 C58 240 72 234 84 238 C98 242 100 256 92 264 C84 272 64 270 60 254 Z" fill={p.grad('typhoeus-head')} lw={6} />
+          <Shape p={p} d={mx('M60 254 C58 240 72 234 84 238 C98 242 100 256 92 264 C84 272 64 270 60 254 Z', 225)} fill={p.grad('typhoeus-head')} lw={6} />
+          {/* 뿔 */}
+          <Shape p={p} d="M188 84 C168 70 160 46 172 16 C180 42 192 56 208 68 Z" fill={p.grad('typhoeus-horn')} />
+          <Shape p={p} d={mx('M188 84 C168 70 160 46 172 16 C180 42 192 56 208 68 Z', 225)} fill={p.grad('typhoeus-horn')} />
+          {/* 볼 지느러미 */}
+          <Shape p={p} d="M156 108 L118 94 L140 120 L112 130 L146 140 L124 158 L164 156 Z" fill={p.fill('#561A28')} lw={6} />
+          <Shape p={p} d={mx('M156 108 L118 94 L140 120 L112 130 L146 140 L124 158 L164 156 Z', 225)} fill={p.fill('#561A28')} lw={6} />
+          {/* 큰 머리 */}
+          <Shape p={p} d="M212 66 L225 38 L238 66 Z" fill={p.fill('#561A28')} lw={6} />
+          <Shape p={p} d="M150 112 C146 84 176 62 225 62 C274 62 304 84 300 112 C306 134 296 152 286 162 C270 178 250 184 225 184 C200 184 180 178 164 162 C154 152 144 134 150 112 Z" fill={p.grad('typhoeus-head')} />
+          <Shine p={p} cx={190} cy={78} rx={16} ry={6} opacity={0.45} />
+          <Ellipse cx={194} cy={110} rx={21} ry={12} fill={p.fill('#2E0C16')} transform="rotate(15 194 110)" />
+          <Ellipse cx={256} cy={110} rx={21} ry={12} fill={p.fill('#2E0C16')} transform="rotate(-15 256 110)" />
+          <GlowEye p={p} cx={195} cy={111} rx={13} ry={8} color="#FF7A1F" core="#FFF27A" rot={15} />
+          <GlowEye p={p} cx={255} cy={111} rx={13} ry={8} color="#FF7A1F" core="#FFF27A" rot={-15} />
+          <Shape p={p} d="M166 88 C184 84 204 92 218 106 L213 113 C200 104 184 100 168 100 Z" fill={p.fill('#2E0C16')} lw={5} />
+          <Shape p={p} d={mx('M166 88 C184 84 204 92 218 106 L213 113 C200 104 184 100 168 100 Z', 225)} fill={p.fill('#2E0C16')} lw={5} />
+          <Ellipse cx={214} cy={130} rx={4} ry={3} fill={p.line} />
+          <Ellipse cx={236} cy={130} rx={4} ry={3} fill={p.line} />
+          {/* 불을 머금은 아가리 */}
+          <Shape p={p} d="M174 140 C200 134 250 134 276 140 C272 168 252 180 225 180 C198 180 178 168 174 140 Z" fill={p.grad('typhoeus-mouth')} />
+          <Path d="M194 174 C190 160 202 154 208 146 C214 156 220 152 225 142 C230 152 236 154 242 146 C248 156 260 162 256 174 C246 180 204 180 194 174 Z" fill={p.grad('typhoeus-fire')} />
+          <Path d="M180 141 L188 158 L196 139 L204 150 L212 138 L218 148 L225 137 L232 148 L238 138 L246 150 L254 139 L262 158 L270 141 Z" fill={p.fill('#F4F1E6')} />
+          <Shape p={p} d="M196 176 L200 156 L209 173 Z" fill={p.fill('#F4F1E6')} lw={4} />
+          <Shape p={p} d={mx('M196 176 L200 156 L209 173 Z', 225)} fill={p.fill('#F4F1E6')} lw={4} />
+          {/* 불티 */}
+          {!p.tinted && [[150, 26, 5], [300, 30, 4], [20, 220, 5], [430, 210, 5], [120, 290, 4], [340, 296, 4]].map(([x, y, r], i) => (
+            <Circle key={i} cx={x} cy={y} r={r} fill={p.fill(i % 2 ? '#FFF27A' : '#FF7A1F')} opacity={0.85} />
+          ))}
+        </G>
+      );
+    },
+  },
+};
