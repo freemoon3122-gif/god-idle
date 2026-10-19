@@ -2,7 +2,7 @@ import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useSta
 import { Animated, Easing, LayoutChangeEvent, PanResponder, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { BOSS_TIME_LIMIT, chapterOf, DIFFICULTIES, isBossWave, SKILLS, stageLabel } from '../game/balance';
-import { DEPTH_SCALE, FIELD_W, nearestMonster, VIEW_W } from '../game/field';
+import { DEPTH_SCALE, FIELD_W, nearestMonster, SPLASH_RANGE, VIEW_W } from '../game/field';
 import { BACKDROP_H, BgTheme, FieldBackground, SKY } from './Background';
 import { CHAPTERS } from '../game/story';
 import { formatNumber } from '../game/format';
@@ -21,8 +21,8 @@ const ND = Platform.OS !== 'web';
 const SIDE = 20; // 좌우 여백
 const HERO_SCALE = 3.6;
 const MOUNTED_SCALE = 3.1; // 탈것(구름·상어)을 타면 폭이 넓어지므로 조금 작게
-const MOB_WIDTH = 64; // 일반 몬스터 그림 폭(pt). 스프라이트 크기가 달라도 이 폭에 맞춘다
-const BOSS_WIDTH = 110;
+const MOB_WIDTH = 32; // 일반 몬스터 그림 폭(pt). 스프라이트 크기가 달라도 이 폭에 맞춘다 (여러 마리가 나와서 작게)
+const BOSS_WIDTH = 55;
 const FIELD_HUD = 120; // 필드 위쪽에 남겨 둘 공간 (스테이지·몬스터 정보 글자, 캐릭터 머리)
 const STICK_MAX = 46; // 조이스틱 손잡이가 움직이는 최대 거리(pt)
 const MAX_EFFECTS = 70;
@@ -428,10 +428,30 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
 
   // ───────────── 타격 연출 ─────────────
 
-  const playHit = (hit: Hit, autoCount: number, skillInSameTick: boolean) => {
+  /** chainFrom: 자동 공격 범위 피해가 시작된 곳 (처음 맞은 몬스터 위치) */
+  const playHit = (hit: Hit, skillInSameTick: boolean, chainFrom: { monX: number; monY: number } | null = null) => {
     const p = targetPos(hit.targetId); // 맞은 몬스터 위치에 연출을 그린다
     const hitMonster = (power: number, hitStop = 0) => hitMonsterAnim(hit.targetId, power, hitStop);
     // 광역 스킬의 두 번째 이후 대상: 큰 연출은 첫 대상에만, 나머지는 작은 폭발과 숫자만
+    if (hit.secondary && hit.source === 'auto') {
+      // 자동 공격의 범위 피해 (숫자까지 띄우면 화면이 너무 어지러워서 생략)
+      if (state.god === 'zeus' && chainFrom) {
+        // 제우스: 처음 맞은 몬스터에서 이 몬스터로 번개가 이어진다
+        add({ kind: 'zap', width, height: HEIGHT, fromX: chainFrom.monX, fromY: chainFrom.monY, toX: p.monX, toY: p.monY, color: '#FFE97A', thick: 3 });
+        add({ kind: 'glow', x: p.monX, y: p.monY, color: '#FFE97A', size: 46 });
+        hitMonster(4);
+      } else if (state.god === 'poseidon') {
+        // 포세이돈: 퍼져 나온 물결이 닿으면 물보라 (파도가 닿는 시간만큼 늦게)
+        later(220, () => {
+          add({ kind: 'debris', x: p.monX, y: p.monY, color: '#BFF4FF', count: 4, power: 30 });
+          hitMonster(4);
+        });
+      } else {
+        add({ kind: 'burst', x: p.monX, y: p.monY, color: orbColor(state), size: 40 });
+        hitMonster(4);
+      }
+      return;
+    }
     if (hit.secondary) {
       add({ kind: 'burst', x: p.monX, y: p.monY, color: skillColor(hit.source as SkillId), size: 80 });
       hitMonster(10);
@@ -443,10 +463,27 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
 
     switch (hit.source) {
       case 'auto': {
-        // 공격 속도가 빠를 때는 연출이 화면을 가리지 않게 일부만 보여준다
-        if (autoCount > 2 && Math.random() < 0.5) return;
         const color = orbColor(state);
+        if (state.god === 'zeus') {
+          // 제우스: 손에서 몬스터로 번개가 꽂힌다 (날아가는 시간 없이 바로)
+          add({ kind: 'zap', width, height: HEIGHT, fromX: p.heroX, fromY: p.heroY - 10, toX: p.monX, toY: p.monY, color, thick: 4 });
+          add({ kind: 'glow', x: p.monX, y: p.monY, color, size: 80 });
+          add({ kind: 'debris', x: p.monX, y: p.monY, color, count: 4, power: 36 });
+          hitMonster(5);
+          if (!skillInSameTick) damageText(hit, 16, colors.text);
+          return;
+        }
         add({ kind: 'orb', fromX: p.heroX, fromY: p.heroY, toX: p.monX, toY: p.monY, color });
+        if (state.god === 'poseidon') {
+          // 포세이돈: 물 구슬이 닿으면 그 자리에서 파도 물결이 동그랗게 퍼진다 (범위 피해 범위만큼)
+          later(160, () => {
+            add({ kind: 'ripple', x: p.monX, y: p.monY + 10, size: SPLASH_RANGE * (width / VIEW_W) * 2.4, color });
+            add({ kind: 'debris', x: p.monX, y: p.monY, color: '#E6FBFF', count: 6, power: 44 });
+            hitMonster(5);
+            if (!skillInSameTick) damageText(hit, 16, colors.text);
+          });
+          return;
+        }
         later(160, () => {
           add({ kind: 'glow', x: p.monX, y: p.monY, color, size: 70 });
           add({ kind: 'debris', x: p.monX, y: p.monY, color, count: 4, power: 36 });
@@ -784,9 +821,19 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
   useImperativeHandle(ref, () => ({
     play(r: ActionResult) {
       r.casts.forEach(playCast);
-      const autoCount = r.hits.filter((h) => h.source === 'auto').length;
+      const autoCount = r.hits.filter((h) => h.source === 'auto' && !h.secondary).length;
       const skillInSameTick = r.hits.some((h) => h.source !== 'auto' && h.source !== 'tap');
-      r.hits.forEach((h) => playHit(h, autoCount, skillInSameTick));
+      // 자동 공격 + 그 범위 피해는 한 묶음: 공격 속도가 빠를 때는 화면이 가려지지 않게 묶음째 일부만 보여 준다
+      let chainFrom: { monX: number; monY: number } | null = null;
+      let skipChain = false;
+      for (const h of r.hits) {
+        if (h.source === 'auto' && !h.secondary) {
+          chainFrom = targetPos(h.targetId);
+          skipChain = autoCount > 2 && Math.random() < 0.5;
+        }
+        if (h.source === 'auto' && skipChain) continue;
+        playHit(h, skillInSameTick, chainFrom);
+      }
       if (r.killed) {
         const targets = r.killedIds.length ? r.killedIds.map((id) => targetPos(id)) : [pos.current];
         later(120, () => {

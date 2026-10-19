@@ -82,6 +82,8 @@ import {
   clampHero,
   CONTACT_RANGE,
   DEPTH_SCALE,
+  SPLASH_RANGE,
+  SPLASH_RATIO,
   distance,
   HERO_HP_PER_DPS,
   HERO_REGEN,
@@ -323,7 +325,7 @@ export function tick(state: GameState, dt: number, rng: Rng = Math.random, move:
     while (s.attackCooldown <= 0) {
       s.attackCooldown += 1000 / attacksPerSecond(s);
       if (s.raid && s.raid.stunLeft > 0) continue; // 브레스에 맞아 기절: 자동 공격을 못 한다
-      s = hitMonster(s, normalHit(s, 'auto', rng), result, rng);
+      s = autoAttack(s, result, rng);
     }
   }
 
@@ -709,6 +711,19 @@ function fieldTick(s: GameState, dt: number, result: ActionResult, rng: Rng): Ga
     return { ...enterWave(next, Math.max(1, s.wave - 1), rng), farming: true };
   }
   return enterWave(next, s.wave, rng);
+}
+
+/** 자동 공격: 가장 가까운 몬스터 + 그 주변 몬스터에게 절반 피해 (범위 피해) */
+function autoAttack(s: GameState, result: ActionResult, rng: Rng): GameState {
+  const target = s.raid ? null : nearestMonster(s.hero, s.monsters);
+  const hit = normalHit(s, 'auto', rng);
+  if (!target) return hitMonster(s, hit, result, rng); // 레이드: 보스 하나
+  const near = s.monsters.filter((m) => m.id !== target.id && distance(m.x, m.y, target.x, target.y) <= SPLASH_RANGE).map((m) => m.id);
+  s = hitMonster(s, { ...hit, targetId: target.id }, result, rng);
+  for (const id of near) {
+    if (s.monsters.some((m) => m.id === id)) s = hitMonster(s, { ...hit, damage: hit.damage * SPLASH_RATIO, targetId: id, secondary: true }, result, rng);
+  }
+  return s;
 }
 
 /** 스킬 한 타: 광역이면 모든 몬스터, 아니면 가장 가까운 한 마리 (레이드는 보스 하나) */

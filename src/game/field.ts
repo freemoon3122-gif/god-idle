@@ -24,6 +24,9 @@ const SPAWN_DIST = 62;
  */
 export const CONTACT_RANGE = 9;
 export const DEPTH_SCALE = 160;
+/** 자동 공격 범위 피해: 맞은 몬스터 주변 이 거리 안의 다른 몬스터도 SPLASH_RATIO만큼 맞는다 (몬스터 무리 대응) */
+export const SPLASH_RANGE = 18;
+export const SPLASH_RATIO = 0.5;
 export const MONSTER_ATTACK_INTERVAL = 1_000;
 /**
  * 몬스터 공격력 = 자기 최대 체력 × 이 값 → 체력이 제곱되는 높은 난이도에서는 공격력도 제곱된다.
@@ -36,13 +39,19 @@ export const HERO_HP_PER_DPS = 40;
 /** 붙은 몬스터가 없으면 체력이 초당 이만큼 회복된다 → 떨어져서 회복하고 다시 싸우는 전략 */
 export const HERO_REGEN = 0.06;
 
-/** 무리의 몬스터 한 마리 체력·골드 = 예전 "몬스터 1마리"의 이 비율 */
-const MOB_SHARE = 0.45;
 /**
- * 경험치는 더 짜게: 한 스테이지는 예전 웨이브 0.2개만큼만 강해지는데 몬스터는 4~5마리라서,
- * 체력·골드와 같은 비율로 주면 레벨이 예전보다 9배 빨리 오른다.
+ * 무리의 몬스터 한 마리 체력·골드 = 예전 "몬스터 1마리"의 이 비율.
+ * 한 스테이지에 8~12마리(평균 10)라 무리 전체 = 예전 1.8마리분 (마리 수를 늘려도 스테이지 전체 양은 그대로)
  */
-const MOB_XP_SHARE = 0.06;
+const MOB_SHARE = 0.18;
+/**
+ * 경험치는 더 짜게: 한 스테이지는 예전 웨이브 0.2개만큼만 강해지는데 몬스터는 여러 마리라서,
+ * 체력·골드와 같은 비율로 주면 레벨이 너무 빨리 오른다. (무리 전체 = 예전 0.24마리분)
+ */
+const MOB_XP_SHARE = 0.024;
+/** 한 스테이지의 몬스터 수: 일반 8~12마리, 보스 스테이지는 보스 + 졸개 */
+const MOB_MIN = 8;
+const BOSS_MINIONS = 4;
 const BOSS_XP_SHARE = 0.3;
 
 export function newHero(): Hero {
@@ -66,8 +75,8 @@ function aroundPoint(around: { x: number; y: number }, angle: number, dist: numb
 }
 
 /**
- * 스테이지의 몬스터 무리. 일반은 3~5마리, 보스 스테이지는 보스 + 졸개 2마리. 골드는 공물 강화 반영 전 값.
- * 신을 둘러싸듯 여러 방향에서 나타난다 (한쪽 방향으로 뭉쳐서 오도록 시작 방향만 무작위)
+ * 스테이지의 몬스터 무리. 일반은 8~12마리, 보스 스테이지는 보스 + 졸개 4마리. 골드는 공물 강화 반영 전 값.
+ * 한 방향에서 무리 지어 몰려온다 (방향은 스테이지마다 무작위). 무리라서 자동 공격의 범위 피해가 잘 들어간다
  */
 export function spawnWave(stage: number, difficulty: number, firstId: number, rng: () => number, around = HERO_START): FieldMonster[] {
   const { kind, name } = monsterKindFor(stage);
@@ -76,7 +85,9 @@ export function spawnWave(stage: number, difficulty: number, firstId: number, rn
     list.push({ ...m, id: firstId + list.length, attack: m.maxHp * ratio, attackCd: MONSTER_ATTACK_INTERVAL * (0.5 + rng() * 0.5) });
   const base = rng() * Math.PI * 2;
   const mob = (st: number, i: number, n: number) => {
-    const { x, y } = aroundPoint(around, base + ((i - (n - 1) / 2) * Math.PI) / 3.5, SPAWN_DIST + rng() * 12);
+    // 한 방향에서 무리 지어 몰려온다 (부채꼴 약 70도 안에 퍼지고, 거리를 달리해서 겹겹이)
+    const spread = Math.min(Math.PI / 3.5, (Math.PI * 0.4) / n);
+    const { x, y } = aroundPoint(around, base + (i - (n - 1) / 2) * spread, SPAWN_DIST + (i % 3) * 7 + rng() * 6);
     const hp = Math.ceil(monsterHp(st, difficulty) * MOB_SHARE);
     add(
       { kind, name, hp, maxHp: hp, isBoss: false, x, y, gold: monsterGold(st, 0, difficulty) * MOB_SHARE, xp: xpForKill(st) * MOB_XP_SHARE },
@@ -88,11 +99,10 @@ export function spawnWave(stage: number, difficulty: number, firstId: number, rn
     const hp = monsterHp(stage, difficulty);
     const p = aroundPoint(around, base, SPAWN_DIST + 8);
     add({ kind, name: `보스 ${name}`, hp, maxHp: hp, isBoss: true, ...p, gold: monsterGold(stage, 0, difficulty), xp: xpForKill(stage) * BOSS_XP_SHARE }, BOSS_ATTACK_RATIO);
-    mob(stage - 1, 0, 3);
-    mob(stage - 1, 2, 3);
+    for (let i = 0; i < BOSS_MINIONS; i++) mob(stage - 1, i < BOSS_MINIONS / 2 ? i : i + 1, BOSS_MINIONS + 1); // 보스 자리(가운데)는 비운다
     return list;
   }
-  const count = 3 + (stage % 3);
+  const count = MOB_MIN + (stage % 5);
   for (let i = 0; i < count; i++) mob(stage, i, count);
   return list;
 }

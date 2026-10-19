@@ -35,7 +35,9 @@ export type EffectSpec =
   | { kind: 'toast'; text: string; color: string }
   | { kind: 'arrow'; fromX: number; fromY: number; toX: number; toY: number; color: string }
   | { kind: 'island'; x: number; toY: number; size: number }
-  | { kind: 'breath'; fromX: number; toX: number; y: number; height: number };
+  | { kind: 'breath'; fromX: number; toX: number; y: number; height: number }
+  | { kind: 'zap'; width: number; height: number; fromX: number; fromY: number; toX: number; toY: number; color: string; thick: number }
+  | { kind: 'ripple'; x: number; y: number; size: number; color: string };
 
 export type Effect = EffectSpec & { id: number };
 
@@ -83,6 +85,10 @@ export function EffectView({ effect, onDone }: { effect: Effect; onDone: (id: nu
       return <Island {...e} onDone={done} />;
     case 'breath':
       return <Breath {...e} onDone={done} />;
+    case 'zap':
+      return <Zap {...e} onDone={done} />;
+    case 'ripple':
+      return <Ripple {...e} onDone={done} />;
   }
 }
 
@@ -719,6 +725,91 @@ function Toast({ text, color, onDone }: { text: string; color: string; onDone: (
     >
       <Text style={[styles.toastText, { color }]}>{text}</Text>
     </Animated.View>
+  );
+}
+
+// ───────────── 지지직 번개: 두 점 사이를 지그재그로 잇는다 (제우스 자동 공격, 연쇄 번개) ─────────────
+
+function Zap({
+  width,
+  height,
+  fromX,
+  fromY,
+  toX,
+  toY,
+  color,
+  thick,
+  onDone,
+}: {
+  width: number;
+  height: number;
+  fromX: number;
+  fromY: number;
+  toX: number;
+  toY: number;
+  color: string;
+  thick: number;
+  onDone: () => void;
+}) {
+  const p = useProgress(220, onDone, Easing.linear);
+  const points = useMemo(() => {
+    // 선분을 7조각으로 나누고, 중간 점들을 선에 수직인 방향으로 무작위로 흔든다
+    const len = Math.hypot(toX - fromX, toY - fromY) || 1;
+    const nx = -(toY - fromY) / len;
+    const ny = (toX - fromX) / len;
+    const n = 7;
+    return Array.from({ length: n + 1 }, (_, i) => {
+      const t = i / n;
+      const j = i === 0 || i === n ? 0 : (Math.random() - 0.5) * Math.min(26, len * 0.25);
+      return `${fromX + (toX - fromX) * t + nx * j},${fromY + (toY - fromY) * t + ny * j}`;
+    }).join(' ');
+  }, []);
+  // 번쩍 → 살짝 꺼짐 → 다시 번쩍 → 사라짐 (번개다운 깜빡임)
+  const opacity = p.interpolate({ inputRange: [0, 0.15, 0.3, 0.45, 1], outputRange: [1, 0.25, 1, 0.9, 0] });
+  return (
+    <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { opacity }]}>
+      <Svg width={width} height={height}>
+        <G strokeLinejoin="round" strokeLinecap="round" fill="none">
+          <Polyline points={points} stroke={color} strokeOpacity={0.35} strokeWidth={thick * 3} />
+          <Polyline points={points} stroke={color} strokeWidth={thick} />
+          <Polyline points={points} stroke="#FFFFFF" strokeWidth={thick * 0.4} />
+        </G>
+      </Svg>
+    </Animated.View>
+  );
+}
+
+// ───────────── 파도 물결: 맞은 자리에서 물 고리 3겹이 차례로 퍼진다 (포세이돈 자동 공격) ─────────────
+
+function Ripple({ x, y, size, color, onDone }: { x: number; y: number; size: number; color: string; onDone: () => void }) {
+  const p = useProgress(650, onDone, Easing.out(Easing.quad));
+  const h = size * 0.45; // 옆에서 본 바닥이라 납작한 타원
+  return (
+    <>
+      {[0, 1, 2].map((i) => {
+        const start = i * 0.18; // 고리마다 조금씩 늦게 출발
+        return (
+          <Animated.View
+            key={i}
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              left: x - size / 2,
+              top: y - h / 2,
+              width: size,
+              height: h,
+              opacity: p.interpolate({ inputRange: [0, start, start + 0.1, 1], outputRange: [0, 0, 0.9 - i * 0.2, 0], extrapolate: 'clamp' }),
+              transform: [{ scale: p.interpolate({ inputRange: [0, start, 1], outputRange: [0.1, 0.1, 1 - i * 0.12], extrapolate: 'clamp' }) }],
+            }}
+          >
+            <Svg width={size} height={h}>
+              <Ellipse cx={size / 2} cy={h / 2} rx={size / 2 - 4} ry={h / 2 - 3} fill={color} fillOpacity={0.22} stroke={color} strokeWidth={7} strokeOpacity={0.85} />
+              <Ellipse cx={size / 2} cy={h / 2} rx={size / 2 - 4} ry={h / 2 - 3} fill="none" stroke="#FFFFFF" strokeWidth={2.5} />
+            </Svg>
+          </Animated.View>
+        );
+      })}
+    </>
   );
 }
 
