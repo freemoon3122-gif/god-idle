@@ -49,7 +49,7 @@ import { loadGame, saveGame } from './src/storage/save';
 import { BattleHandle, BattleView } from './src/ui/BattleView';
 import { DevPanel } from './src/ui/DevPanel';
 import { EvolveModal, GodChoiceModal, OfflineModal } from './src/ui/Modals';
-import { DifficultyBar, StatusBar as GameStatusBar, UpgradeList, WeaponPanel } from './src/ui/Panels';
+import { DifficultyChip, DifficultyPicker, StatusBar as GameStatusBar, UpgradeList, WeaponPanel } from './src/ui/Panels';
 import { Sheet, SKILL_DOCK_H, SkillDock, TAB_BAR_H, TabBar, TabId, TABS } from './src/ui/Hud';
 import { heroSprite } from './src/ui/sprites';
 import { DailyPanel, RaidPanel, RaidResultModal, StoryModal } from './src/ui/RaidUI';
@@ -84,6 +84,7 @@ function Game() {
   const insets = useSafeAreaInsets(); // 노치·홈 바 영역 (그 밑에는 버튼을 두지 않는다)
   const { height: screenH } = useWindowDimensions();
   const [tab, setTab] = useState<TabId | null>(null); // 열려 있는 창 (null = 닫힘)
+  const [picking, setPicking] = useState(false); // 난이도 고르는 창
   const [topH, setTopH] = useState(110); // 위쪽 정보 영역의 실제 높이 (재서 전투 화면에 알려 준다)
   const [game, setGame] = useState<GameState | null>(null);
   const gameRef = useRef<GameState | null>(null);
@@ -274,8 +275,8 @@ function Game() {
 
       {/* 위: 레벨·골드·난이도 (맵 위에 반투명하게 겹친다) */}
       <View style={[styles.top, { paddingTop: insets.top + 4 }]} onLayout={(e) => setTopH(e.nativeEvent.layout.height)}>
+        <DifficultyChip state={game} onPress={() => setPicking(true)} />
         <GameStatusBar state={game} />
-        <DifficultyBar state={game} onChange={(d) => act((s) => changeDifficulty(s, d))} />
       </View>
 
       {/* 아래: 스킬 버튼 → 탭. 탭을 누르면 창이 올라온다 (같은 탭을 다시 누르면 닫힘) */}
@@ -312,6 +313,7 @@ function Game() {
         }}
       />
       <GachaResultModal pulls={pulls} onClose={() => setPulls(null)} />
+      <DifficultyPicker state={game} visible={picking} onChoose={(d) => act((s) => changeDifficulty(s, d))} onClose={() => setPicking(false)} />
       <StatusBar style="light" />
     </View>
   );

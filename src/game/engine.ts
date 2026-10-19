@@ -86,7 +86,6 @@ import {
   HERO_HP_PER_DPS,
   HERO_REGEN,
   HERO_SPEED,
-  HERO_START,
   MONSTER_ATTACK_INTERVAL,
   MONSTER_SPEED,
   nearestMonster,
@@ -805,14 +804,12 @@ function gainXp(state: GameState, amount: number, result: ActionResult): GameSta
 }
 
 function enterWave(state: GameState, wave: number, rng: Rng = Math.random): GameState {
-  const monsters = spawnWave(wave, state.difficulty, state.nextMonsterId, rng);
-  // 신이 오른쪽에 가 있으면 몬스터는 왼쪽에서 나온다 (신 바로 위에 생기지 않게)
-  const fromLeft = state.hero.x > 55;
+  const monsters = spawnWave(wave, state.difficulty, state.nextMonsterId, rng, state.hero); // 신 주변에서 나타난다
   return {
     ...state,
     wave,
     maxWave: Math.max(state.maxWave, wave),
-    monsters: fromLeft ? monsters.map((m) => ({ ...m, x: 100 - m.x })) : monsters,
+    monsters,
     nextMonsterId: state.nextMonsterId + monsters.length,
     bossTimeLeft: isBossWave(wave) ? BOSS_TIME_LIMIT : null,
     bossBonusLeft: MAX_TIME_BONUS,

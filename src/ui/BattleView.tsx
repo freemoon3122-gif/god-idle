@@ -2,7 +2,8 @@ import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useSta
 import { Animated, Easing, LayoutChangeEvent, PanResponder, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { BOSS_TIME_LIMIT, chapterOf, DIFFICULTIES, isBossWave, SKILLS, stageLabel } from '../game/balance';
-import { FIELD_W, nearestMonster } from '../game/field';
+import { DEPTH_SCALE, FIELD_W, nearestMonster, VIEW_W } from '../game/field';
+import { BACKDROP_H, BgTheme, FieldBackground, SKY } from './Background';
 import { CHAPTERS } from '../game/story';
 import { formatNumber } from '../game/format';
 import { defenseMultiplier, RAIDS, raidPhases } from '../game/raids';
@@ -13,7 +14,7 @@ import Svg, { Circle, Defs, RadialGradient, Stop } from 'react-native-svg';
 import { Effect, EffectSpec, EffectView } from './effects';
 import { FLOAT_CELLS, heroLayout, HeroSprite } from './HeroSprite';
 import { PixelSprite, spriteSize } from './PixelSprite';
-import { heroSprite, skyColors } from './sprites';
+import { heroSprite } from './sprites';
 import { colors } from './theme';
 
 const ND = Platform.OS !== 'web';
@@ -64,8 +65,8 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
   const width = size.w;
   const HEIGHT = size.h;
   const GROUND = bottomInset + 18; // 필드 맨 앞(y=0)이 서는 높이: 아래 UI 바로 위
-  // 필드 깊이(y 0~1)의 화면 높이: 필드 폭의 0.9배(엔진의 DEPTH_SCALE 90과 맞춤), 화면이 낮으면 들어가는 만큼
-  const DEPTH_PX = Math.max(80, Math.min((width - 2 * SIDE) * 0.9, HEIGHT - GROUND - topInset - FIELD_HUD - 60));
+  // 화면에 보이는 필드 높이 (위 정보 영역과 아래 버튼 사이)
+  const DEPTH_PX = Math.max(80, HEIGHT - GROUND - topInset - FIELD_HUD);
   const [effects, setEffects] = useState<Effect[]>([]);
   const nextId = useRef(0);
   const [flashColor, setFlashColor] = useState('#FFFFFF');
@@ -92,9 +93,16 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
   const heroBodyH = spriteSize(hero, heroScale).h;
   const heroFloat = heroSize.floating ? FLOAT_CELLS * heroScale : 0; // 탈것을 타면 살짝 떠 있다
   const raid = state.raid;
-  // 필드 좌표 → 화면: x는 좌우, y(깊이)는 바닥 띠 안에서 위아래 (뒤에 있을수록 위)
-  const toX = (x: number) => SIDE + 24 + (x / FIELD_W) * (width - 2 * SIDE - 48);
-  const toBottom = (y: number) => GROUND - 14 + y * DEPTH_PX;
+  // ───────────── 카메라: 맵(240×160단위)이 화면(100단위 폭)보다 커서, 신을 화면 가운데에 두고 따라간다 ─────────────
+  const u = width / VIEW_W; // 필드 1단위 = u픽셀
+  const worldW = FIELD_W * u;
+  const worldH = DEPTH_SCALE * u; // 맵 세로(깊이) 픽셀
+  // 맵 끝에 가면 카메라가 멈추고 신만 움직인다 (맵 바깥이 보이지 않게)
+  const camX = Math.min(FIELD_W - VIEW_W / 2, Math.max(VIEW_W / 2, state.hero.x));
+  const camY = worldH > DEPTH_PX ? Math.min(worldH - DEPTH_PX, Math.max(0, state.hero.y * worldH - DEPTH_PX / 2)) : 0;
+  // 필드 좌표 → 화면: x는 좌우, y(깊이)는 뒤에 있을수록 위
+  const toX = (x: number) => width / 2 + (x - camX) * u;
+  const toBottom = (y: number) => GROUND - 14 + y * worldH - camY;
   const heroLeft = toX(state.hero.x) - heroSize.w / 2;
   const heroBottom = toBottom(state.hero.y) + heroFloat;
   // 주 대상: 레이드면 레이드 보스, 아니면 신에게 가장 가까운 몬스터
@@ -134,6 +142,18 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
   };
   // 필드 몬스터별 피격 애니메이션 (FieldMonsterView가 등록한다)
   const mobAnims = useRef(new Map<number, { flash: Animated.Value; knock: Animated.Value }>());
+  // 배경도 카메라를 따라 부드럽게 민다
+  const bgX = useRef(new Animated.Value(-toX(0))).current;
+  const bgY = useRef(new Animated.Value(0)).current;
+  const bgLeft = toX(0);
+  const bgBottom = toBottom(0) - 14; // 맵 앞쪽 끝이 바닥보다 조금 아래까지
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(bgX, { toValue: bgLeft, duration: 60, easing: Easing.linear, useNativeDriver: ND }),
+      Animated.timing(bgY, { toValue: -bgBottom, duration: 60, easing: Easing.linear, useNativeDriver: ND }),
+    ]).start();
+  }, [bgLeft, bgBottom]);
+
   // 신의 위치: 엔진은 0.05초마다 위치를 바꾸므로, 그 사이를 부드럽게 이어 준다
   const heroPosX = useRef(new Animated.Value(heroLeft)).current;
   const heroPosY = useRef(new Animated.Value(-heroBottom)).current;
@@ -811,7 +831,8 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
   }));
 
   // 기간토마키아는 핏빛 노을, 티포에우스는 용암이 끓는 화산
-  const [skyTop, skyBottom] = raid ? (raid.id === 'gigantomachy' ? ['#2A0E14', '#7A2A1E'] : ['#12040A', '#4A0E08']) : skyColors(state);
+  const theme: BgTheme = state.god ?? 'earth';
+  const [skyTop, skyBottom] = raid ? (raid.id === 'gigantomachy' ? ['#2A0E14', '#7A2A1E'] : ['#12040A', '#4A0E08']) : SKY[theme];
   const phases = raid ? raidPhases(raid.id, state.god) : [];
   const boss = raid ? null : state.monsters.find((m) => m.isBoss) ?? null;
   const faceLeft = !!nearest && nearest.x < state.hero.x;
@@ -844,8 +865,16 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
           { backgroundColor: skyBottom, transform: [{ translateX: shake.x }, { translateY: shake.y }, { scale: zoom }] },
         ]}
       >
-        {/* 하늘(위) / 필드(가운데, 신과 몬스터가 다니는 곳) / 땅(아래 UI 뒤) */}
-        <View style={[styles.skyTop, { backgroundColor: skyTop, height: Math.max(0, HEIGHT - GROUND - DEPTH_PX - 70) }]} />
+        {/* 하늘(화면 고정) / 맵 배경(카메라를 따라 움직임) / 땅(아래 UI 뒤) */}
+        <View style={[styles.skyTop, { backgroundColor: skyTop, height: HEIGHT * 0.45 }]} />
+        {!raid && (
+          <Animated.View
+            pointerEvents="none"
+            style={{ position: 'absolute', left: 0, bottom: 0, transform: [{ translateX: bgX }, { translateY: bgY }] }}
+          >
+            <FieldBackground theme={theme} w={worldW} h={worldH + 28} />
+          </Animated.View>
+        )}
         <View style={[styles.ground, { height: bottomInset }, raid && { backgroundColor: raid.id === 'typhoeus' ? '#3A1208' : '#3A2418' }]} />
         {raid?.id === 'typhoeus' && <View style={[styles.lava, { bottom: bottomInset }]} />}
 

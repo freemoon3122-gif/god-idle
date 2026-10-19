@@ -1,4 +1,4 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { ADULT_LEVEL, formOf, GOD_LEVEL, GODS, SKILLS, TEEN_LEVEL, ULTIMATE_LEVEL, UPGRADES, upgradeCost, xpToNext, DIFFICULTIES, STAGES_PER_DIFFICULTY } from '../game/balance';
 import { availableSkills, bulkPlan, canCast, canEnhance, canFuse, formName, ownedPower, skillCooldown, skillLevel } from '../game/engine';
@@ -33,31 +33,64 @@ export function StatusBar({ state }: { state: GameState }) {
   );
 }
 
-/** 난이도 선택: 5000스테이지를 깨면 다음 난이도가 열린다 */
-export function DifficultyBar({ state, onChange }: { state: GameState; onChange: (d: number) => void }) {
+/** 난이도 칩: Lv 위에 작게. 누르면 난이도 고르는 창이 열린다 */
+export function DifficultyChip({ state, onPress }: { state: GameState; onPress: () => void }) {
+  const d = DIFFICULTIES[state.difficulty];
   return (
-    <View style={styles.diffRow}>
-      {DIFFICULTIES.map((d, i) => {
-        const locked = i > state.unlockedDifficulty;
-        const active = i === state.difficulty;
-        const best = i === state.difficulty ? state.maxWave : state.bestStages[i] ?? 0;
-        return (
-          <Pressable
-            key={d.name}
-            onPress={() => onChange(i)}
-            disabled={locked || active || !!state.raid}
-            accessibilityRole="button"
-            style={[styles.diff, active && { backgroundColor: d.color, borderColor: d.color }, locked && { opacity: 0.4 }]}
-          >
-            <Text style={[styles.diffName, active && { color: '#fff' }, !active && { color: d.color }]}>
-              {locked ? '🔒 ' : ''}
-              {d.name}
-            </Text>
-            <Text style={[styles.diffBest, active && { color: '#fff' }]}>{locked ? `${STAGES_PER_DIFFICULTY} 클리어` : `${best}/${STAGES_PER_DIFFICULTY}`}</Text>
-          </Pressable>
-        );
-      })}
-    </View>
+    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel="난이도 선택" hitSlop={8} style={[styles.chip, { borderColor: d.color }]}>
+      <Text style={[styles.chipText, { color: d.color }]}>
+        {d.name} {state.maxWave}/{STAGES_PER_DIFFICULTY} ▾
+      </Text>
+    </Pressable>
+  );
+}
+
+/** 난이도 고르기: 5000스테이지를 깨면 다음 난이도가 열린다 */
+export function DifficultyPicker({
+  state,
+  visible,
+  onChoose,
+  onClose,
+}: {
+  state: GameState;
+  visible: boolean;
+  onChoose: (d: number) => void;
+  onClose: () => void;
+}) {
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable style={styles.pickerBackdrop} onPress={onClose}>
+        <View style={styles.picker}>
+          <Text style={styles.pickerTitle}>난이도 선택</Text>
+          <Text style={styles.pickerDesc}>5000스테이지를 깨면 다음 난이도가 열려요. 몬스터 체력·공격력은 쉬움의 2·3·4제곱!</Text>
+          {DIFFICULTIES.map((d, i) => {
+            const locked = i > state.unlockedDifficulty;
+            const active = i === state.difficulty;
+            const best = active ? state.maxWave : state.bestStages[i] ?? 0;
+            return (
+              <Pressable
+                key={d.name}
+                onPress={() => {
+                  onChoose(i);
+                  onClose();
+                }}
+                disabled={locked || active || !!state.raid}
+                accessibilityRole="button"
+                style={[styles.diffRow, { borderColor: d.color }, active && { backgroundColor: d.color }, locked && { opacity: 0.4 }]}
+              >
+                <Text style={[styles.diffName, { color: active ? '#fff' : d.color }]}>
+                  {locked ? '🔒 ' : active ? '✓ ' : ''}
+                  {d.name}
+                </Text>
+                <Text style={[styles.diffBest, active && { color: '#fff' }]}>
+                  {locked ? `앞 난이도 ${STAGES_PER_DIFFICULTY} 클리어 시 열림` : `최고 ${best}/${STAGES_PER_DIFFICULTY}`}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      </Pressable>
+    </Modal>
   );
 }
 
@@ -280,10 +313,15 @@ const styles = StyleSheet.create({
   level: { color: colors.text, fontSize: 22, fontWeight: '900' },
   form: { color: colors.subText, fontSize: 15, fontWeight: '700' },
   gold: { color: colors.gold, fontSize: 18, fontWeight: '800' },
-  diffRow: { flexDirection: 'row', gap: 6, marginBottom: 8 },
-  diff: { flex: 1, borderWidth: 1.5, borderColor: colors.border, borderRadius: 10, paddingVertical: 6, alignItems: 'center', backgroundColor: colors.panel },
-  diffName: { fontWeight: '900', fontSize: 13 },
-  diffBest: { color: colors.subText, fontSize: 10, fontWeight: '700', marginTop: 1 },
+  chip: { alignSelf: 'flex-start', borderWidth: 1.5, borderRadius: 999, paddingHorizontal: 9, paddingVertical: 2, backgroundColor: 'rgba(10,6,25,0.6)', marginBottom: 2 },
+  chipText: { fontSize: 11, fontWeight: '900' },
+  pickerBackdrop: { flex: 1, backgroundColor: 'rgba(5,3,15,0.6)', justifyContent: 'center', padding: 24 },
+  picker: { backgroundColor: colors.panel, borderRadius: 18, padding: 18, gap: 8, borderWidth: 1, borderColor: colors.border },
+  pickerTitle: { color: colors.text, fontSize: 18, fontWeight: '900', textAlign: 'center' },
+  pickerDesc: { color: colors.subText, fontSize: 12, textAlign: 'center', marginBottom: 4, lineHeight: 17 },
+  diffRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderWidth: 1.5, borderRadius: 12, paddingVertical: 12, paddingHorizontal: 14 },
+  diffName: { fontWeight: '900', fontSize: 16 },
+  diffBest: { color: colors.subText, fontSize: 12, fontWeight: '700' },
   currency: { color: colors.text, fontSize: 13, fontWeight: '800', marginTop: 2 },
   skillLv: { color: colors.gold, fontWeight: '900' },
   xpTrack: { height: 8, borderRadius: 4, backgroundColor: colors.panelLight, marginTop: 8 },
