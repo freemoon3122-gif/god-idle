@@ -48,7 +48,7 @@ function SerpentHead({ p, x, y, s = 1, rot = 0, flip = false, skin, dark, eye = 
       <Shape p={p} d="M-12 6 C4 12 22 12 44 18 C40 26 16 28 -6 20 Z" fill={p.fill(dark)} lw={lw} />
       {/* 벌린 입속 */}
       <Path d="M10 6 L50 2 L42 18 C30 16 18 12 10 6 Z" fill={p.fill('#3A0F2E')} />
-      {tongue && <Path d="M24 10 C34 12 46 14 56 12 L64 6 M56 12 L64 18" stroke={p.fill('#E5484D')} strokeWidth={3.5 / s} strokeLinecap="round" strokeLinejoin="round" fill="none" />}
+      {tongue && <Path d="M30 11 C38 12 44 13 50 12 L56 8 M50 12 L56 16" stroke={p.fill('#E5484D')} strokeWidth={3.5 / s} strokeLinecap="round" strokeLinejoin="round" fill="none" />}
       {/* 송곳니 */}
       <Path d="M38 3 L41 12 L45 2 Z M26 5 L28 11 L31 4 Z" fill={p.fill('#F4F1E6')} />
       {/* 위턱 + 머리 */}
@@ -99,8 +99,8 @@ function gigasLegs(p: Paint, id: string) {
     <G>
       <Tube p={p} d="M96 182 C60 188 18 200 20 232 C22 258 46 264 62 252" w={26} {...G_SNAKE} />
       <Tube p={p} d="M104 182 C140 188 182 200 180 232 C178 258 154 264 138 252" w={26} {...G_SNAKE} />
-      <SerpentHead p={p} x={62} y={250} s={0.8} rot={-34} skin="#86BC5E" dark="#3D6430" />
-      <SerpentHead p={p} x={138} y={250} s={0.8} rot={34} flip skin="#86BC5E" dark="#3D6430" />
+      <SerpentHead p={p} x={60} y={250} s={0.74} rot={-50} skin="#86BC5E" dark="#3D6430" />
+      <SerpentHead p={p} x={140} y={250} s={0.74} rot={50} flip skin="#86BC5E" dark="#3D6430" />
       <Shape p={p} d="M50 180 C50 166 150 166 150 180 C150 196 128 200 100 200 C72 200 50 196 50 180 Z" fill={p.grad(`${id}-hip`)} />
     </G>
   );
@@ -294,8 +294,8 @@ export const RAID_ART: Record<string, ArtDef> = {
         {/* 뱀 다리 */}
         <Tube p={p} d="M126 246 C84 252 38 266 38 298 C38 324 66 332 84 316" w={32} {...G_SNAKE} />
         <Tube p={p} d={mx('M126 246 C84 252 38 266 38 298 C38 324 66 332 84 316', 150)} w={32} {...G_SNAKE} />
-        <SerpentHead p={p} x={84} y={314} s={1} rot={-34} skin="#86BC5E" dark="#3D6430" />
-        <SerpentHead p={p} x={216} y={314} s={1} rot={34} flip skin="#86BC5E" dark="#3D6430" />
+        <SerpentHead p={p} x={82} y={314} s={0.92} rot={-50} skin="#86BC5E" dark="#3D6430" />
+        <SerpentHead p={p} x={218} y={314} s={0.92} rot={50} flip skin="#86BC5E" dark="#3D6430" />
         <Shape p={p} d="M84 246 C84 230 216 230 216 246 C216 264 186 270 150 270 C114 270 84 264 84 246 Z" fill={p.grad('porphyrion-hip')} />
         {/* 팔 */}
         <Tube p={p} d="M50 170 C40 190 36 204 38 222" w={30} color="#86915A" dark="#434E26" light="#C8D488" />
@@ -374,8 +374,8 @@ export const RAID_ART: Record<string, ArtDef> = {
         {/* 뱀 다리 (짙은 바다색) */}
         <Tube p={p} d="M120 228 C82 236 46 248 46 276 C46 300 72 306 88 294" w={28} color="#2F5A85" dark="#16305A" light="#6E9CD0" band="#1E4272" />
         <Tube p={p} d={mx('M120 228 C82 236 46 248 46 276 C46 300 72 306 88 294', 145)} w={28} color="#2F5A85" dark="#16305A" light="#6E9CD0" band="#1E4272" />
-        <SerpentHead p={p} x={88} y={292} s={0.85} rot={-34} skin="#4F86B8" dark="#1B3C85" />
-        <SerpentHead p={p} x={202} y={292} s={0.85} rot={34} flip skin="#4F86B8" dark="#1B3C85" />
+        <SerpentHead p={p} x={86} y={292} s={0.8} rot={-50} skin="#4F86B8" dark="#1B3C85" />
+        <SerpentHead p={p} x={204} y={292} s={0.8} rot={50} flip skin="#4F86B8" dark="#1B3C85" />
         <Shape p={p} d="M80 224 C80 208 210 208 210 224 C210 242 180 248 145 248 C110 248 80 242 80 224 Z" fill={p.grad('polybotes-hip')} />
         {/* 팔 */}
         <Tube p={p} d="M58 158 C46 172 46 182 52 194" w={26} color="#4F86B8" dark="#22436A" />
@@ -450,15 +450,15 @@ export const RAID_ART: Record<string, ArtDef> = {
       const neck = { color: '#A83A46', dark: '#561A28', light: '#F08088', band: '#7A2232' };
       // 왼쪽 목 세 개 (오른쪽은 좌우 반사)
       const necks: { d: string; w: number; x: number; y: number; rot: number; s: number }[] = [
-        { d: 'M150 200 C110 204 54 200 58 166 C60 146 72 134 62 120', w: 26, x: 62, y: 120, rot: 40, s: 0.95 },
-        { d: 'M160 190 C130 170 96 150 100 112 C102 92 98 78 88 66', w: 24, x: 88, y: 66, rot: 56, s: 0.9 },
-        { d: 'M178 180 C162 150 144 122 144 94 C144 78 140 66 134 58', w: 22, x: 134, y: 58, rot: 74, s: 0.85 },
+        { d: 'M150 200 C110 204 54 204 56 172 C58 152 70 142 62 130', w: 26, x: 62, y: 130, rot: 34, s: 1.1 },
+        { d: 'M160 190 C130 172 98 156 100 120 C101 104 98 94 90 84', w: 24, x: 90, y: 84, rot: 52, s: 1.05 },
+        { d: 'M178 180 C162 152 146 126 146 100 C146 88 142 78 136 70', w: 22, x: 136, y: 70, rot: 72, s: 0.92 },
       ];
       const heads = (side: 'L' | 'R'): ReactNode =>
         necks.map((n, i) => (
           <G key={side + i}>
             <Tube p={p} d={side === 'L' ? n.d : mx(n.d, 225)} w={n.w} {...neck} />
-            <SerpentHead p={p} x={side === 'L' ? n.x : 450 - n.x} y={n.y} s={n.s} rot={side === 'L' ? n.rot : -n.rot} flip={side === 'L'} skin="#B8404C" dark="#561A28" eye="#FFB030" horns />
+            <SerpentHead p={p} x={side === 'L' ? n.x : 450 - n.x} y={n.y} s={n.s} rot={side === 'L' ? n.rot : -n.rot} flip={side === 'L'} skin="#D04A56" dark="#6A1E2E" eye="#FFC23A" horns tongue={false} />
           </G>
         ));
       return (
@@ -470,20 +470,20 @@ export const RAID_ART: Record<string, ArtDef> = {
           {/* 뱀 목·머리들 */}
           {heads('L')}
           {heads('R')}
-          {/* 팔 */}
-          <Tube p={p} d="M128 204 C100 214 84 232 80 252" w={30} {...neck} band={undefined} />
-          <Tube p={p} d={mx('M128 204 C100 214 84 232 80 252', 225)} w={30} {...neck} band={undefined} />
           {/* 몸통 + 황금 배비늘 */}
           <Shape p={p} d="M118 186 C160 166 290 166 332 186 C352 196 356 222 342 238 C332 252 318 262 302 272 L148 272 C132 262 118 252 108 238 C94 222 98 196 118 186 Z" fill={p.grad('typhoeus-torso')} />
           <Path d="M124 214 Q132 222 140 214 M120 232 Q128 240 136 232 M310 214 Q318 222 326 214 M314 232 Q322 240 330 232" stroke={p.fill('#4A1220')} strokeWidth={3.5} fill="none" strokeLinecap="round" />
+          {/* 팔 */}
+          <Tube p={p} d="M132 200 C100 204 74 218 68 246" w={34} {...neck} band={undefined} />
+          <Tube p={p} d={mx('M132 200 C100 204 74 218 68 246', 225)} w={34} {...neck} band={undefined} />
           <Shape p={p} d="M182 182 L268 182 C276 212 272 246 262 274 L188 274 C178 246 174 212 182 182 Z" fill={p.grad('typhoeus-gold')} />
           <Path d="M180 206 C205 214 245 214 270 206 M180 230 C205 238 245 238 270 230 M184 254 C206 262 244 262 266 254" stroke={p.fill('#9A6A10')} strokeWidth={4} fill="none" strokeLinecap="round" />
           <Shine p={p} cx={198} cy={196} rx={10} ry={5} opacity={0.6} />
           {/* 발톱 손 */}
-          <Shape p={p} d="M64 262 L58 282 L72 268 Z M78 268 L78 288 L88 268 Z M90 262 L100 278 L98 256 Z" fill={p.fill('#F4F1E6')} lw={4} />
-          <Shape p={p} d={mx('M64 262 L58 282 L72 268 Z M78 268 L78 288 L88 268 Z M90 262 L100 278 L98 256 Z', 225)} fill={p.fill('#F4F1E6')} lw={4} />
-          <Shape p={p} d="M60 254 C58 240 72 234 84 238 C98 242 100 256 92 264 C84 272 64 270 60 254 Z" fill={p.grad('typhoeus-head')} lw={6} />
-          <Shape p={p} d={mx('M60 254 C58 240 72 234 84 238 C98 242 100 256 92 264 C84 272 64 270 60 254 Z', 225)} fill={p.grad('typhoeus-head')} lw={6} />
+          <Shape p={p} d="M46 256 L36 278 L54 266 Z M60 266 L58 290 L70 270 Z M76 266 L86 286 L86 262 Z" fill={p.fill('#F4F1E6')} lw={4} />
+          <Shape p={p} d={mx('M46 256 L36 278 L54 266 Z M60 266 L58 290 L70 270 Z M76 266 L86 286 L86 262 Z', 225)} fill={p.fill('#F4F1E6')} lw={4} />
+          <Shape p={p} d="M42 250 C40 232 58 226 72 230 C90 234 94 252 84 264 C74 274 46 270 42 250 Z" fill={p.grad('typhoeus-head')} lw={6} />
+          <Shape p={p} d={mx('M42 250 C40 232 58 226 72 230 C90 234 94 252 84 264 C74 274 46 270 42 250 Z', 225)} fill={p.grad('typhoeus-head')} lw={6} />
           {/* 뿔 */}
           <Shape p={p} d="M188 84 C168 70 160 46 172 16 C180 42 192 56 208 68 Z" fill={p.grad('typhoeus-horn')} />
           <Shape p={p} d={mx('M188 84 C168 70 160 46 172 16 C180 42 192 56 208 68 Z', 225)} fill={p.grad('typhoeus-horn')} />
