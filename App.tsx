@@ -42,6 +42,8 @@ import {
   startRaid,
   tap,
   tick,
+  awaken,
+  upgradeBossPassive,
   upgradeSkill,
 } from './src/game/engine';
 import { chapterStory, StoryLine, storyFor } from './src/game/story';
@@ -53,7 +55,7 @@ import { DifficultyChip, DifficultyPicker, StatusBar as GameStatusBar, UpgradeLi
 import { Sheet, SKILL_DOCK_H, SkillDock, TAB_BAR_H, TabBar, TabId, TABS } from './src/ui/Hud';
 import { heroSprite } from './src/ui/sprites';
 import { DailyPanel, RaidPanel, RaidResultModal, StoryModal } from './src/ui/RaidUI';
-import { GachaResultModal, ShopPanel, SkillUpgradePanel } from './src/ui/ShopUI';
+import { GachaResultModal, PassivePanel, ShopPanel, SkillUpgradePanel } from './src/ui/ShopUI';
 import { colors } from './src/ui/theme';
 import { WeaponId } from './src/game/weapons';
 
@@ -252,10 +254,15 @@ function Game() {
         onBuy={(id: UpgradeId) => act((s) => buyUpgradeBulk(s, id, buyAmount))}
       />
     ),
-    skill: game.god || game.level >= 1000 ? (
-      <SkillUpgradePanel state={game} onUpgrade={(id) => act((s) => upgradeSkill(s, id))} />
-    ) : (
-      <Text style={styles.empty}>Lv.1000 청소년 신이 되면 스킬이 생기고, 강화할 수 있어요.</Text>
+    skill: (
+      <>
+        {game.god || game.level >= 1000 ? (
+          <SkillUpgradePanel state={game} onUpgrade={(id) => act((s) => upgradeSkill(s, id))} />
+        ) : (
+          <Text style={styles.empty}>Lv.1000 청소년 신이 되면 스킬이 생기고, 강화할 수 있어요.</Text>
+        )}
+        <PassivePanel state={game} onBoss={() => act(upgradeBossPassive)} onAwaken={() => act(awaken)} />
+      </>
     ),
   };
 

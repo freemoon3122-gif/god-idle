@@ -8,11 +8,21 @@ import {
   GACHA_COST,
   GACHA_RATES,
   isDamageSkill,
+  AWAKEN_ORDER,
+  AWAKEN_STEPS_PER_STAGE,
+  awakenCost,
+  awakenCount,
+  awakenCycle,
+  awakenStage,
+  awakenStep,
+  BOSS_PASSIVE_MAX_LEVEL,
+  BOSS_PASSIVE_PER_LEVEL,
+  bossPassiveCost,
   SKILL_MAX_LEVEL,
   skillLevelEffect,
   skillUpgradeCost,
 } from '../game/economy';
-import { availableSkills, canUpgradeSkill, skillLevel } from '../game/engine';
+import { availableSkills, canAwaken, canUpgradeBossPassive, canUpgradeSkill, skillLevel } from '../game/engine';
 import { formatNumber } from '../game/format';
 import { GameState, SkillId } from '../game/types';
 import { RARITY_INFO, RARITY_ORDER, WeaponId, WEAPONS } from '../game/weapons';
@@ -61,6 +71,80 @@ export function SkillUpgradePanel({ state, onUpgrade }: { state: GameState; onUp
           </View>
         );
       })}
+    </View>
+  );
+}
+
+// ───────────── 패시브 스킬: 버튼을 누를 필요 없이 항상 적용된다 ─────────────
+
+export function PassivePanel({ state, onBoss, onAwaken }: { state: GameState; onBoss: () => void; onAwaken: () => void }) {
+  const bossLv = state.bossPassive;
+  const bossMax = bossLv >= BOSS_PASSIVE_MAX_LEVEL;
+  const bossOk = canUpgradeBossPassive(state);
+  const stage = awakenStage(state.awaken);
+  const step = awakenStep(state.awaken);
+  const now = AWAKEN_ORDER[stage];
+  const awakenOk = canAwaken(state);
+  return (
+    <View style={styles.panel}>
+      <View style={styles.headRow}>
+        <Text style={styles.title}>✨ 패시브 스킬</Text>
+        <Text style={styles.balance}>🪙 {formatNumber(state.coins)}</Text>
+      </View>
+      <Text style={styles.desc}>누르지 않아도 항상 적용돼요. 강화코인 🪙로 강화해요.</Text>
+
+      <View style={styles.row}>
+        <Text style={styles.emoji}>👹</Text>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.name}>
+            거인 사냥꾼 <Text style={styles.lv}>Lv.{bossLv}</Text>
+          </Text>
+          <Text style={styles.small}>
+            보스 피해 +{Math.round(bossLv * BOSS_PASSIVE_PER_LEVEL * 100)}%
+            {!bossMax && ` → +${Math.round((bossLv + 1) * BOSS_PASSIVE_PER_LEVEL * 100)}%`} (최대 {BOSS_PASSIVE_MAX_LEVEL}레벨)
+          </Text>
+        </View>
+        <Pressable
+          onPress={onBoss}
+          disabled={!bossOk}
+          accessibilityRole="button"
+          accessibilityLabel="거인 사냥꾼 강화"
+          style={({ pressed }) => [styles.buy, !bossOk && styles.disabled, pressed && { opacity: 0.8 }]}
+        >
+          <Text style={styles.buyText}>{bossMax ? 'MAX' : `🪙 ${bossPassiveCost(bossLv)}`}</Text>
+        </Pressable>
+      </View>
+
+      <Text style={styles.subTitle}>🌟 신의 각성 · {awakenCycle(state.awaken) + 1}바퀴째</Text>
+      <Text style={styles.desc}>4단계가 순환해요. 한 단계를 {AWAKEN_STEPS_PER_STAGE}번 강화하면 다음 단계로 넘어가요.</Text>
+      {AWAKEN_ORDER.map((a, i) => {
+        const pct = Math.round(a.perLevel * awakenCount(state.awaken, a.kind) * 100);
+        const active = i === stage;
+        return (
+          <View key={a.kind} style={[styles.awakenRow, active && styles.awakenActive]}>
+            <Text style={styles.awakenStage}>{i + 1}단계</Text>
+            <Text style={styles.emoji}>{a.emoji}</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.name}>{a.name} +{pct}%</Text>
+              <Text style={styles.small}>
+                {active ? `${'●'.repeat(step)}${'○'.repeat(AWAKEN_STEPS_PER_STAGE - step)}  강화할 때마다 +${Math.round(a.perLevel * 100)}%` : `강화당 +${Math.round(a.perLevel * 100)}%`}
+              </Text>
+            </View>
+          </View>
+        );
+      })}
+      <Pressable
+        onPress={onAwaken}
+        disabled={!awakenOk}
+        accessibilityRole="button"
+        accessibilityLabel="신의 각성 강화"
+        style={({ pressed }) => [styles.shopButton, !awakenOk && styles.disabled, pressed && { opacity: 0.8 }]}
+      >
+        <Text style={styles.shopLabel}>
+          {now.emoji} {stage + 1}단계 {now.name} 강화 ({step + 1}/{AWAKEN_STEPS_PER_STAGE})
+        </Text>
+        <Text style={styles.shopPrice}>🪙 {awakenCost(state.awaken)}</Text>
+      </Pressable>
     </View>
   );
 }
@@ -212,6 +296,9 @@ const styles = StyleSheet.create({
   shopSub: { color: '#FFE6A8', fontWeight: '800', fontSize: 11 },
   shopPrice: { color: '#fff', fontWeight: '800', fontSize: 13, marginTop: 2 },
   rates: { color: colors.subText, fontSize: 11 },
+  awakenRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 5, paddingHorizontal: 6, borderRadius: 10, borderWidth: 1, borderColor: 'transparent' },
+  awakenActive: { borderColor: colors.gold, backgroundColor: 'rgba(255, 213, 74, 0.08)' },
+  awakenStage: { color: colors.subText, fontWeight: '900', fontSize: 11, width: 30 },
 
   backdrop: { flex: 1, backgroundColor: 'rgba(5, 3, 15, 0.8)', justifyContent: 'center', padding: 16 },
   resultCard: {

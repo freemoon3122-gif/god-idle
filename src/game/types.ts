@@ -164,6 +164,8 @@ export interface GameState {
   diamonds: number; // 💎 캐시 재화
   coins: number; // 🪙 강화코인 (스킬 강화 재료)
   skillLevels: Partial<Record<SkillId, number>>; // 스킬 강화 레벨 (없으면 0)
+  bossPassive: number; // 패시브 '거인 사냥꾼' 레벨
+  awaken: number; // 패시브 '신의 각성' 총 강화 횟수 (4단계 × 5번씩 순환)
   totalKills: number;
   savedAt: number; // 마지막 저장 시각 (Date.now()). 오프라인 보상 계산용
 }

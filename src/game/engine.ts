@@ -71,6 +71,11 @@ import {
   GACHA_COST,
   GACHA_GUARANTEED_RATES,
   GACHA_RATES,
+  awakenBonus,
+  awakenCost,
+  BOSS_PASSIVE_MAX_LEVEL,
+  bossPassiveBonus,
+  bossPassiveCost,
   RAID_CLEAR_DIAMONDS,
   raidCoins,
   SKILL_MAX_LEVEL,
@@ -149,6 +154,8 @@ export function newGame(now: number): GameState {
     diamonds: 0,
     coins: 0,
     skillLevels: {},
+    bossPassive: 0,
+    awaken: 0,
     totalKills: 0,
     savedAt: now,
   };
@@ -202,6 +209,8 @@ export function migrate(saved: GameState): GameState {
     diamonds: saved.diamonds ?? 0,
     coins: saved.coins ?? 0,
     skillLevels: saved.skillLevels ?? {},
+    bossPassive: saved.bossPassive ?? 0,
+    awaken: saved.awaken ?? 0,
   };
 }
 
@@ -214,7 +223,7 @@ function refundTicket(t: GameState['raidTickets'], id: RaidId | undefined): Game
 
 export function attackDamage(s: GameState): number {
   return Math.round(
-    upgradeDamage(s.levels.damage) * levelMultiplier(s.level) * FORM_INFO[formOf(s.level)].multiplier * weaponMultiplier(s),
+    upgradeDamage(s.levels.damage) * levelMultiplier(s.level) * FORM_INFO[formOf(s.level)].multiplier * weaponMultiplier(s) * awakenBonus(s.awaken, 'damage'),
   );
 }
 
@@ -246,6 +255,7 @@ export function availableSkills(s: GameState): SkillId[] {
 export function attacksPerSecond(s: GameState, includeBuff = true): number {
   let aps = baseAttacksPerSecond(s.levels.speed);
   if (s.god === 'zeus') aps *= 1.3;
+  aps *= awakenBonus(s.awaken, 'speed');
   if (includeBuff && s.buff?.skill === 'zeus_storm') aps *= 3;
   return aps;
 }
@@ -255,9 +265,35 @@ export function critChance(s: GameState, includeBuff = true): number {
   return Math.min(1, baseCritChance(s.levels.crit) + (s.god === 'poseidon' ? 0.15 : 0));
 }
 
-/** 치명타 피해 배율. 기본 3배(포세이돈 4배) × 치명타 피해 강화 */
+/** 치명타 피해 배율. 기본 3배(포세이돈 4배) × 치명타 피해 강화 × 패시브 */
 export function critMultiplier(s: GameState): number {
-  return (s.god === 'poseidon' ? 4 : CRIT_MULTIPLIER) * critDamageBonus(s.levels.critDmg ?? 0);
+  return (s.god === 'poseidon' ? 4 : CRIT_MULTIPLIER) * critDamageBonus(s.levels.critDmg ?? 0) * awakenBonus(s.awaken, 'critDmg');
+}
+
+// ───────────── 패시브 스킬 (🪙로 강화, 항상 적용) ─────────────
+
+/** 보스에게 주는 피해 배율 (거인 사냥꾼) */
+export function bossDamageMultiplier(s: GameState): number {
+  return bossPassiveBonus(s.bossPassive);
+}
+
+export function canUpgradeBossPassive(s: GameState): boolean {
+  return s.bossPassive < BOSS_PASSIVE_MAX_LEVEL && s.coins >= bossPassiveCost(s.bossPassive);
+}
+
+export function upgradeBossPassive(state: GameState): GameState {
+  if (!canUpgradeBossPassive(state)) return state;
+  return { ...state, coins: state.coins - bossPassiveCost(state.bossPassive), bossPassive: state.bossPassive + 1 };
+}
+
+export function canAwaken(s: GameState): boolean {
+  return s.coins >= awakenCost(s.awaken);
+}
+
+/** 신의 각성 한 번: 지금 단계의 능력치가 오르고, 5번째면 다음 단계로 */
+export function awaken(state: GameState): GameState {
+  if (!canAwaken(state)) return state;
+  return { ...state, coins: state.coins - awakenCost(state.awaken), awaken: state.awaken + 1 };
 }
 
 /** 필드에서 신의 최대 체력 = 초당 피해 × 40 (강해질수록 튼튼해진다) */
@@ -672,7 +708,7 @@ function emptyResult(state: GameState): ActionResult {
 function moveHero(s: GameState, dt: number, move: MoveInput | null): GameState {
   const len = move ? Math.hypot(move.x, move.y) : 0;
   if (!move || len < 0.15) return s.hero.moving ? { ...s, hero: { ...s.hero, moving: false } } : s;
-  const k = (HERO_SPEED * Math.min(1, len) * dt) / 1000 / len;
+  const k = (HERO_SPEED * awakenBonus(s.awaken, 'move') * Math.min(1, len) * dt) / 1000 / len;
   // 화면 위쪽 = 깊이 y가 커지는 방향. 깊이는 0~1이라 x와 같은 빠르기로 느껴지게 DEPTH_SCALE로 나눈다
   const p = clampHero(s.hero.x + move.x * k, s.hero.y - (move.y * k) / DEPTH_SCALE);
   return { ...s, hero: { ...s.hero, ...p, moving: true } };
@@ -760,8 +796,9 @@ function hitMonster(state: GameState, hit: Hit, result: ActionResult, rng: Rng):
   if (state.raid) return hitRaid(state, hit, result, rng);
   const target = (hit.targetId !== undefined && state.monsters.find((m) => m.id === hit.targetId)) || nearestMonster(state.hero, state.monsters);
   if (!target) return state;
-  result.hits.push({ ...hit, targetId: target.id });
-  const hp = target.hp - hit.damage;
+  const damage = target.isBoss ? hit.damage * bossDamageMultiplier(state) : hit.damage;
+  result.hits.push({ ...hit, damage, targetId: target.id });
+  const hp = target.hp - damage;
   if (hp > 0) return { ...state, monsters: state.monsters.map((m) => (m.id === target.id ? { ...m, hp } : m)) };
   return killMonster(state, target, result, rng);
 }
@@ -1014,7 +1051,7 @@ function raidTick(state: GameState, dt: number, result: ActionResult, rng: Rng):
 /** 레이드 몬스터에게 피해를 준다. 기믹 배율을 곱하고, 체력에 따라 기믹을 발동하고, 쓰러지면 다음 페이즈로 */
 function hitRaid(state: GameState, hit: Hit, result: ActionResult, rng: Rng): GameState {
   const r0 = state.raid!;
-  const damage = hit.damage * raidDamageMultiplier(r0);
+  const damage = hit.damage * raidDamageMultiplier(r0) * (r0.monster.isBoss ? bossDamageMultiplier(state) : 1);
   result.hits.push({ ...hit, damage });
   const dealt = Math.min(damage, r0.monster.hp);
   let r: RaidState = { ...r0, monster: { ...r0.monster, hp: r0.monster.hp - damage }, totalDamage: r0.totalDamage + dealt };
