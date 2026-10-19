@@ -1,4 +1,4 @@
-import { Circle, Ellipse, G, Path } from 'react-native-svg';
+import { Circle, Ellipse, G, Path, RadialGradient, Stop } from 'react-native-svg';
 
 import { ArtDef, Ball, LW, Paint, Shape, Shine, VGrad } from './kit';
 
@@ -196,7 +196,7 @@ export const HEROES_ART: Record<string, ArtDef> = {
       <>
         <Ball id="adult-skin" {...SKIN} />
         <Ball id="adult-bronze" light="#FFEFA8" base="#E3A93E" dark="#8F5A14" />
-        <VGrad id="adult-helm" from="#FFE48A" mid="#E0A53A" to="#9A6418" />
+        <VGrad id="adult-helm" from="#FFD98A" mid="#D98E36" to="#7E4A12" />
         <VGrad id="adult-cape" from="#F0555A" to="#8C1F2A" />
         <VGrad id="adult-plume" from="#FF6A6A" to="#A82630" />
         <VGrad id="adult-leather" from="#9A6236" to="#5A3418" />
@@ -242,8 +242,8 @@ export const HEROES_ART: Record<string, ArtDef> = {
         {/* 머리 */}
         <Ellipse cx={128} cy={94} rx={58} ry={52} fill={p.grad('adult-skin')} stroke={p.line} strokeWidth={LW} />
         {/* 투구: 볏 → 둥근 몸체(볼 가리개) → 금 테 */}
-        <Shape p={p} d="M84 44 C84 14 130 4 192 12 C206 14 208 30 196 34 C150 28 120 30 102 50 Z" fill={p.grad('adult-plume')} />
-        <Soft p={p} d="M110 26 Q140 16 180 18 M100 38 Q130 26 170 26" color="#FF9A9A" w={3} />
+        <Shape p={p} d="M76 62 C68 20 110 2 150 6 C188 10 210 32 206 60 C198 48 186 42 174 42 C160 32 140 30 124 36 C106 38 90 48 76 62 Z" fill={p.grad('adult-plume')} />
+        <Soft p={p} d="M92 40 Q120 16 160 18 M118 24 Q150 14 190 34" color="#FF9A9A" w={3} />
         <Shape p={p} d="M64 124 C52 60 84 30 128 30 C172 30 204 60 192 124 L176 128 C178 108 174 94 168 86 Q128 74 88 86 C82 94 78 108 80 128 Z" fill={p.grad('adult-helm')} />
         <Shape p={p} d="M84 84 Q128 70 172 84 L170 94 Q128 82 86 94 Z" fill={p.grad('adult-gold')} lw={5} />
         <Shine p={p} cx={96} cy={50} rx={16} ry={7} opacity={0.6} />
@@ -270,12 +270,16 @@ export const HEROES_ART: Record<string, ArtDef> = {
         <VGrad id="zeus-gold" {...GOLD} />
         <VGrad id="zeus-sash" from="#7FB0FF" to="#2D5FC0" />
         <VGrad id="zeus-bolt" from="#FFFDE0" mid="#FFE45C" to="#FFA51F" />
+        <RadialGradient id="zeus-glow" cx="0.5" cy="0.5" r="0.5">
+          <Stop offset="0" stopColor="#FFF7A0" stopOpacity={0.7} />
+          <Stop offset="1" stopColor="#FFF7A0" stopOpacity={0} />
+        </RadialGradient>
       </>
     ),
     draw: (p) => (
       <G>
         {/* 번개 뒤 후광 */}
-        {!p.tinted && <Ellipse cx={222} cy={76} rx={46} ry={72} fill="#FFF27A" opacity={0.25} transform="rotate(35 222 76)" />}
+        {!p.tinted && <Circle cx={222} cy={76} r={48} fill="url(#zeus-glow)" />}
         {/* 다리 + 샌들 (구름에 가려짐) */}
         <Shape p={p} d="M76 222 L76 244 L92 244 L92 222 Z" fill={p.grad('zeus-skin')} />
         <Shape p={p} d="M118 222 L118 244 L134 244 L134 222 Z" fill={p.grad('zeus-skin')} />
@@ -300,7 +304,7 @@ export const HEROES_ART: Record<string, ArtDef> = {
         <Sparkle p={p} x={250} y={130} r={6} />
         <Circle cx={194} cy={122} r={13} fill={p.grad('zeus-skin')} stroke={p.line} strokeWidth={LW} />
         {/* 풍성한 머리 (머리 뒤) */}
-        <Shape p={p} d="M44 118 C22 98 32 60 56 56 C58 32 88 22 105 32 C122 22 152 32 154 56 C178 60 188 98 166 118 Z" fill={p.grad('zeus-hair')} />
+        <Shape p={p} d="M44 122 C18 114 20 86 34 78 C22 60 38 40 58 46 C60 24 86 16 105 28 C124 16 150 24 152 46 C172 40 188 60 176 78 C190 86 192 114 166 122 Z" fill={p.grad('zeus-hair')} />
         <Ellipse cx={105} cy={94} rx={48} ry={46} fill={p.grad('zeus-skin')} stroke={p.line} strokeWidth={LW} />
         {/* 앞머리 */}
         <Shape p={p} d="M58 86 C56 60 80 48 105 48 C130 48 154 60 152 86 C144 78 136 72 128 74 C120 66 110 66 104 72 C96 66 86 66 80 74 C72 72 64 78 58 86 Z" fill={p.grad('zeus-hair')} />
@@ -444,29 +448,29 @@ export const HEROES_ART: Record<string, ArtDef> = {
     draw: (p) => (
       <G>
         {/* 가슴·배 지느러미 */}
-        <Shape p={p} d="M150 128 Q160 168 190 172 Q186 146 182 126 Z" fill={p.grad('shark-back')} />
-        <Shape p={p} d="M262 126 Q272 162 298 166 Q296 142 292 124 Z" fill={p.grad('shark-back')} />
+        <Shape p={p} d="M150 136 Q160 172 190 176 Q188 150 184 134 Z" fill={p.grad('shark-back')} />
+        <Shape p={p} d="M262 136 Q272 168 300 172 Q298 150 294 134 Z" fill={p.grad('shark-back')} />
         {/* 등지느러미 */}
-        <Shape p={p} d="M232 60 Q252 34 262 6 Q280 30 312 58 Z" fill={p.grad('shark-back')} />
+        <Shape p={p} d="M256 46 Q284 30 292 6 Q312 30 346 46 Z" fill={p.grad('shark-back')} />
         {/* 꼬리 */}
-        <Shape p={p} d="M84 88 Q50 66 12 30 Q22 76 30 96 Q20 120 14 150 Q52 120 86 108 Z" fill={p.grad('shark-back')} />
+        <Shape p={p} d="M86 90 Q50 66 12 26 Q20 76 30 98 Q20 124 14 154 Q52 124 88 112 Z" fill={p.grad('shark-back')} />
         {/* 몸통 */}
-        <Shape p={p} d="M70 96 C120 66 200 50 290 52 C360 54 410 72 434 96 Q440 110 426 118 C360 138 230 140 150 126 C110 120 84 110 70 96 Z" fill={p.grad('shark-back')} />
+        <Shape p={p} d="M66 100 C110 58 200 38 290 40 C362 42 410 64 428 92 Q434 110 420 122 C360 148 230 152 150 138 C108 130 82 116 66 100 Z" fill={p.grad('shark-back')} />
         {/* 흰 배 */}
-        <Shape p={p} d="M96 108 Q200 112 300 106 Q360 104 420 114 C350 136 230 140 150 126 C124 122 106 116 96 108 Z" fill={p.grad('shark-belly')} lw={5} />
-        <Shine p={p} cx={210} cy={68} rx={40} ry={7} opacity={0.5} rotate={-6} />
-        <Shine p={p} cx={256} cy={22} rx={3} ry={10} opacity={0.6} rotate={30} />
+        <Shape p={p} d="M92 114 Q200 120 300 112 Q360 108 418 118 C356 146 230 152 150 138 C122 134 104 124 92 114 Z" fill={p.grad('shark-belly')} lw={5} />
+        <Shine p={p} cx={200} cy={58} rx={44} ry={7} opacity={0.5} rotate={-6} />
+        <Shine p={p} cx={300} cy={26} rx={3} ry={9} opacity={0.6} rotate={35} />
         {/* 아가미 */}
         <Path d="M318 74 Q312 90 318 104 M332 72 Q326 88 332 102 M346 72 Q340 86 346 100" stroke={p.fill('#2F4560')} strokeWidth={4} strokeLinecap="round" fill="none" />
         {/* 벌린 입 + 이빨 */}
-        <Shape p={p} d="M360 110 Q396 102 432 102 Q426 128 392 128 Q370 126 360 110 Z" fill={p.grad('shark-mouth')} lw={5} />
-        <Path d="M368 110 L374 120 L380 108 L386 120 L392 106 L398 119 L404 105 L410 118 L416 104 L422 116 L428 103 Z" fill={p.fill('#FFFFFF')} />
-        <Path d="M380 127 L386 118 L392 128 M402 127 L408 118 L414 125" stroke={p.fill('#FFFFFF')} strokeWidth={4} strokeLinejoin="round" fill="none" />
+        <Shape p={p} d="M356 110 Q392 102 426 100 Q420 128 388 128 Q366 126 356 110 Z" fill={p.grad('shark-mouth')} lw={5} />
+        <Path d="M364 110 L370 120 L376 108 L382 120 L388 106 L394 119 L400 105 L406 118 L412 104 L418 116 L424 102 Z" fill={p.fill('#FFFFFF')} />
+        <Path d="M376 127 L382 118 L388 128 M398 127 L404 118 L410 125" stroke={p.fill('#FFFFFF')} strokeWidth={4} strokeLinejoin="round" fill="none" />
         {/* 눈 + 매서운 눈썹 */}
-        <Ellipse cx={384} cy={82} rx={10} ry={11} fill={p.fill('#FFFFFF')} stroke={p.line} strokeWidth={5} />
-        <Circle cx={387} cy={83} r={6} fill={p.fill(EYE)} />
-        <Circle cx={385} cy={80} r={2.5} fill={p.fill('#FFFFFF')} />
-        <Path d="M368 68 L398 74" stroke={p.line} strokeWidth={6} strokeLinecap="round" />
+        <Ellipse cx={378} cy={80} rx={10} ry={11} fill={p.fill('#FFFFFF')} stroke={p.line} strokeWidth={5} />
+        <Circle cx={381} cy={81} r={6} fill={p.fill(EYE)} />
+        <Circle cx={379} cy={78} r={2.5} fill={p.fill('#FFFFFF')} />
+        <Path d="M362 66 L392 72" stroke={p.line} strokeWidth={6} strokeLinecap="round" />
       </G>
     ),
   },
