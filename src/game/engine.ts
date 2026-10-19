@@ -4,6 +4,7 @@ import {
   BOSS_TIME_LIMIT,
   MAX_TIME_BONUS,
   CRIT_MULTIPLIER,
+  critDamageBonus,
   findUpgrade,
   FORM_INFO,
   chapterOf,
@@ -127,7 +128,7 @@ export function newGame(now: number): GameState {
     storySeen: [0, 0, 0, 0],
     hero: newHero(),
     gold: 0,
-    levels: { damage: 0, speed: 0, crit: 0, gold: 0 },
+    levels: { damage: 0, speed: 0, crit: 0, critDmg: 0, gold: 0 },
     monsters: spawnWave(1, 0, 0, Math.random),
     nextMonsterId: 100,
     bossTimeLeft: null,
@@ -187,6 +188,7 @@ export function migrate(saved: GameState): GameState {
   return {
     ...saved,
     queuedHits: saved.queuedHits ?? [],
+    levels: { ...saved.levels, critDmg: saved.levels.critDmg ?? 0 }, // 치명타 피해 강화가 생기기 전 저장이면 0
     bossBonusLeft: saved.bossBonusLeft ?? MAX_TIME_BONUS,
     weapons: saved.weapons ?? {},
     weaponEnhance: saved.weaponEnhance ?? {},
@@ -253,9 +255,9 @@ export function critChance(s: GameState, includeBuff = true): number {
   return Math.min(1, baseCritChance(s.levels.crit) + (s.god === 'poseidon' ? 0.15 : 0));
 }
 
-/** 치명타 피해 배율. 포세이돈은 4배 */
+/** 치명타 피해 배율. 기본 3배(포세이돈 4배) × 치명타 피해 강화 */
 export function critMultiplier(s: GameState): number {
-  return s.god === 'poseidon' ? 4 : CRIT_MULTIPLIER;
+  return (s.god === 'poseidon' ? 4 : CRIT_MULTIPLIER) * critDamageBonus(s.levels.critDmg ?? 0);
 }
 
 /** 필드에서 신의 최대 체력 = 초당 피해 × 40 (강해질수록 튼튼해진다) */

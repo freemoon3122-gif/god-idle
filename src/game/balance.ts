@@ -437,6 +437,16 @@ export const UPGRADES: UpgradeInfo[] = [
     describe: (lv) => `확률 ${Math.round(baseCritChance(lv) * 100)}%`,
   },
   {
+    // 치명타 피해: 레벨 제한 없이 계속 세진다. 대신 비용이 가파르게 오른다 (신력은 레벨당 ×1.14, 이건 ×2.0)
+    id: 'critDmg',
+    name: '치명타 피해',
+    emoji: '🗡️',
+    maxLevel: Infinity,
+    baseCost: 1000,
+    costGrowth: 1.6,
+    describe: (lv) => `치명타 피해 +${formatNumber(Math.round((critDamageBonus(lv) - 1) * 100))}%`,
+  },
+  {
     id: 'gold',
     name: '공물',
     emoji: '💰',
@@ -446,6 +456,16 @@ export const UPGRADES: UpgradeInfo[] = [
     describe: (lv) => `골드 +${Math.round((goldMultiplier(lv) - 1) * 100)}%`,
   },
 ];
+
+/**
+ * 치명타 피해 강화 배율: 레벨당 +1%p씩 더한다 (100레벨 +100%, 300레벨 +300%). 레벨 제한 없음.
+ * 곱(×1.04ⁿ)으로 하면 비용과 지수끼리 경쟁해서 성장이 폭주한다 (시뮬레이터: 쉬움을 1시간 만에 클리어).
+ * 더하기로 하면 올릴수록 세지지만, 비용은 지수로 올라서 점점 완만해진다.
+ */
+export const CRIT_DAMAGE_PER_LEVEL = 0.01;
+export function critDamageBonus(level: number): number {
+  return 1 + CRIT_DAMAGE_PER_LEVEL * level;
+}
 
 export function findUpgrade(id: UpgradeId): UpgradeInfo {
   return UPGRADES.find((u) => u.id === id)!;

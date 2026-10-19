@@ -1,7 +1,7 @@
 import { WeaponId } from './weapons';
 
 /** 골드로 올리는 강화 항목 */
-export type UpgradeId = 'damage' | 'speed' | 'crit' | 'gold';
+export type UpgradeId = 'damage' | 'speed' | 'crit' | 'critDmg' | 'gold';
 
 /** Lv.3000에 고르는 신 */
 export type GodId = 'zeus' | 'poseidon';
