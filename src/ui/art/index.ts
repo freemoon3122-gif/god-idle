@@ -10,7 +10,7 @@ export const VECTOR_ART: Record<string, ArtDef> = {
   ...HEROES_ART,
   ...MONSTER_ART,
   ...RAID_ART,
-  // 제우스·포세이돈 치비 일러스트 (heroes.tsx의 예전 그림을 덮어쓴다)
+  // 제우스·포세이돈 치비 일러스트 (무기 휘두르기 층 포함)
   ...ZEUS_ART,
   ...POSEIDON_ART,
 };
