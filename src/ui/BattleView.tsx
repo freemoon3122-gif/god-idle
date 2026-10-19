@@ -979,6 +979,11 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
               </Svg>
             </Animated.View>
           )}
+          {/* 발밑 그림자: 땅에 붙어 있어서 캐릭터가 떠 있는(탈것) 높이만큼 아래에 그린다 */}
+          <View
+            pointerEvents="none"
+            style={[styles.shadow, { width: heroSize.w * 0.7, height: heroSize.w * 0.16, left: heroSize.w * 0.15, bottom: -heroFloat - heroSize.w * 0.06 }]}
+          />
           {/* 가까운 몬스터가 왼쪽에 있으면 그쪽을 본다 */}
           <View style={{ transform: [{ scaleX: faceLeft ? -1 : 1 }] }}>
             <HeroSprite name={hero} scale={heroScale} />
@@ -1169,6 +1174,7 @@ function FieldMonsterView({
       <View style={[styles.mobHpTrack, { width: Math.min(size.w, 60), alignSelf: 'center' }]}>
         <View style={[styles.mobHpFill, { width: `${Math.max(0, m.hp / m.maxHp) * 100}%` }, m.isBoss && { backgroundColor: colors.boss }]} />
       </View>
+      <View style={[styles.shadow, { width: size.w * 0.8, height: size.w * 0.2, left: size.w * 0.1, bottom: -size.w * 0.07 }]} />
       {/* 스프라이트는 왼쪽(신 쪽)을 보고 있다. 신이 오른쪽에 있으면 뒤집는다 */}
       <View style={{ transform: [{ scaleX: faceRight ? -1 : 1 }] }}>
         <PixelSprite name={m.kind} scale={scale} />
@@ -1238,6 +1244,7 @@ function orbColor(s: GameState): string {
 }
 
 const styles = StyleSheet.create({
+  shadow: { position: 'absolute', borderRadius: 999, backgroundColor: 'rgba(10, 6, 25, 0.32)' },
   // userSelect: 웹에서 끌 때 글자가 파랗게 선택되지 않게
   outer: { flex: 1, overflow: 'hidden', backgroundColor: '#000', userSelect: 'none' } as object,
   container: { flex: 1 },

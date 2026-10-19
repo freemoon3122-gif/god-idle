@@ -1,5 +1,8 @@
 import { memo } from 'react';
-import Svg, { Rect } from 'react-native-svg';
+import Svg, { Defs, Rect } from 'react-native-svg';
+
+import { VECTOR_ART } from './art';
+import { makePaint } from './art/kit';
 
 import { OUTLINE, PALETTE, SPRITES } from './sprites';
 
@@ -21,6 +24,17 @@ const SEAM = 0.5; // 틈 메우기용 겹침
  * - memo: props가 같으면 다시 그리지 않는다. 게임은 0.05초마다 화면을 갱신하므로 중요하다.
  */
 export const PixelSprite = memo(function PixelSprite({ name, scale, tint }: Props) {
+  // 카툰 일러스트(벡터)가 있으면 그걸 그린다. 크기는 픽셀 그림과 같다 (좌표 = 칸 × 10)
+  const art = VECTOR_ART[name];
+  if (art) {
+    const paint = makePaint(tint);
+    return (
+      <Svg width={art.w * scale} height={art.h * scale} viewBox={`0 0 ${art.w * 10} ${art.h * 10}`}>
+        {!tint && art.defs && <Defs>{art.defs()}</Defs>}
+        {art.draw(paint)}
+      </Svg>
+    );
+  }
   const rows = outlined(name);
   const width = rows[0]?.length ?? 0;
 
@@ -43,6 +57,8 @@ export const PixelSprite = memo(function PixelSprite({ name, scale, tint }: Prop
 
 /** 외곽선까지 포함한 스프라이트 크기 (칸 수 × scale) */
 export function spriteSize(name: string, scale: number) {
+  const art = VECTOR_ART[name];
+  if (art) return { w: art.w * scale, h: art.h * scale };
   const rows = outlined(name);
   return { w: (rows[0]?.length ?? 0) * scale, h: rows.length * scale };
 }
