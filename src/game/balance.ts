@@ -9,7 +9,7 @@ import { Form, GodId, SkillId, UpgradeId } from './types';
  * 어느 쪽이 더 빨리 커지느냐에 따라 막히는 지점(벽)이 생긴다.
  */
 
-export const WAVES_PER_STAGE = 10; // 10번째 몬스터는 보스
+export const WAVES_PER_STAGE = 10; // 10스테이지마다 보스
 export const BOSS_TIME_LIMIT = 30_000; // 보스전 제한 시간 30초
 export const MAX_TIME_BONUS = 30_000; // 스킬로 늘릴 수 있는 시간은 한 번의 보스전·레이드에서 최대 30초
 export const CRIT_MULTIPLIER = 3;
@@ -54,9 +54,10 @@ export function xpToNext(level: number): number {
   return Math.ceil((5 + Math.pow(l, 1.6)) / LEVEL_SCALE);
 }
 
-export function xpForKill(wave: number): number {
+export function xpForKill(stage: number): number {
+  const wave = effectiveWave(stage);
   const base = (6 + wave * 3.6) * Math.pow(1.01, Math.max(0, wave - 300));
-  return Math.ceil(isBossWave(wave) ? base * 5 : base);
+  return Math.ceil(isBossWave(stage) ? base * 5 : base);
 }
 
 /** 레벨이 오를수록 기본 공격력이 조금씩 오른다 (Lv.10 = 1배, Lv.1000 ≈ 5배, Lv.3000 ≈ 13배) */
@@ -70,11 +71,33 @@ export function isBossWave(wave: number): boolean {
   return wave % WAVES_PER_STAGE === 0;
 }
 
-/** 화면 표시용: wave 23 → "3-3" */
-export function stageLabel(wave: number): string {
-  const stage = Math.floor((wave - 1) / WAVES_PER_STAGE) + 1;
-  const step = ((wave - 1) % WAVES_PER_STAGE) + 1;
-  return `${stage}-${step}`;
+/** 화면 표시용 스테이지 번호 */
+export function stageLabel(stage: number): string {
+  return `${stage}`;
+}
+
+// ───────────── 난이도 ─────────────
+//
+// 쉬움 → 보통 → 어려움 → 극악. 각 난이도는 5000스테이지이고, 5000스테이지를 깨면 다음 난이도가 열린다.
+// 몬스터·스토리·스테이지는 같고, 몬스터의 체력·공격력이 쉬움의 거듭제곱이다.
+//   보통 = 쉬움² (제곱), 어려움 = 쉬움³ (세제곱), 극악 = 쉬움⁴ (네제곱)
+// 골드 보상도 같은 지수로 올린다. (체력만 제곱하고 골드는 그대로면 보통부터는 수학적으로 깰 수 없다)
+// 쉬움 5000스테이지 체력이 약 10⁷⁵ → 극악은 약 10³⁰⁰. JavaScript 숫자 한계(1.8×10³⁰⁸) 바로 아래로 맞췄다.
+export const STAGES_PER_DIFFICULTY = 5000;
+export const DIFFICULTIES = [
+  { name: '쉬움', color: '#5CC46B', power: 1 },
+  { name: '보통', color: '#4C9DFF', power: 2 },
+  { name: '어려움', color: '#FF8A3D', power: 3 },
+  { name: '극악', color: '#FF3B5C', power: 4 },
+];
+
+/**
+ * 스테이지 → 예전 공식의 "웨이브". 한 스테이지 = 몬스터 무리 한 번이라, 예전 웨이브 0.2개만큼 강해진다.
+ * (스테이지 5000 = 예전 웨이브 약 1000)
+ */
+export const STAGE_TO_WAVE = 0.2;
+export function effectiveWave(stage: number): number {
+  return 1 + (stage - 1) * STAGE_TO_WAVE;
 }
 
 /**
@@ -86,30 +109,45 @@ export const HP_GROWTH_EARLY = 1.19;
 export const HP_GROWTH_LATE = 1.18;
 export const HP_GROWTH_SWITCH_WAVE = 300;
 
-export function monsterHp(wave: number): number {
+/** 몬스터 체력. difficulty(0~3)에 따라 기본 체력을 1·2·4·8제곱한다. 보스 스테이지는 6배 */
+export function monsterHp(stage: number, difficulty = 0): number {
+  const wave = effectiveWave(stage);
   const early = Math.min(wave, HP_GROWTH_SWITCH_WAVE) - 1;
   const late = Math.max(0, wave - HP_GROWTH_SWITCH_WAVE);
-  const base = 10 * Math.pow(HP_GROWTH_EARLY, early) * Math.pow(HP_GROWTH_LATE, late);
-  return Math.ceil(isBossWave(wave) ? base * 6 : base);
+  const base = Math.pow(10 * Math.pow(HP_GROWTH_EARLY, early) * Math.pow(HP_GROWTH_LATE, late), DIFFICULTIES[difficulty].power);
+  return Math.ceil(isBossWave(stage) ? base * 6 : base);
 }
 
-export function monsterGold(wave: number, goldLevel: number): number {
-  const base = 3 * Math.pow(1.17, wave - 1);
-  return Math.ceil((isBossWave(wave) ? base * 8 : base) * goldMultiplier(goldLevel));
+export function monsterGold(stage: number, goldLevel: number, difficulty = 0): number {
+  const base = Math.pow(3 * Math.pow(1.17, effectiveWave(stage) - 1), DIFFICULTIES[difficulty].power);
+  return Math.ceil((isBossWave(stage) ? base * 8 : base) * goldMultiplier(goldLevel));
 }
 
-/** 스테이지마다 등장하는 몬스터가 바뀐다. 마지막 종류 이후로는 반복된다. */
+/** 500스테이지 = 한 장(chapter). 장마다 주로 나오는 몬스터가 바뀐다 (총 10장) */
+export const CHAPTER_LENGTH = 500;
 export const MONSTER_KINDS = [
   { kind: 'slime', name: '독 슬라임' },
   { kind: 'bat', name: '흡혈 박쥐' },
   { kind: 'skeleton', name: '해골 전사' },
   { kind: 'ghost', name: '원령' },
   { kind: 'cyclops', name: '분노한 키클롭스' },
+  { kind: 'giant_spear', name: '기간테스 전사' },
+  { kind: 'giant_rock', name: '기간테스 투석병' },
+  { kind: 'polybotes', name: '바다 거인' },
+  { kind: 'porphyrion', name: '거인 군주' },
+  { kind: 'typhoeus', name: '티포에우스의 자식' },
 ];
 
-export function monsterKindFor(wave: number) {
-  const stage = Math.floor((wave - 1) / WAVES_PER_STAGE);
-  return MONSTER_KINDS[stage % MONSTER_KINDS.length];
+/** 몇 번째 장인지 (0~9) */
+export function chapterOf(stage: number): number {
+  return Math.min(MONSTER_KINDS.length - 1, Math.floor((stage - 1) / CHAPTER_LENGTH));
+}
+
+/** 장의 주 몬스터가 나오고, 20스테이지 중 10스테이지는 지난 장의 몬스터가 섞여 나온다 (1장은 주 몬스터만) */
+export function monsterKindFor(stage: number) {
+  const ch = chapterOf(stage);
+  const block = Math.floor((stage - 1) / WAVES_PER_STAGE);
+  return MONSTER_KINDS[ch > 0 && block % 2 === 1 ? ch - 1 : ch];
 }
 
 // ───────────── 신 & 스킬 ─────────────
@@ -178,6 +216,8 @@ export interface SkillInfo {
   cooldownEffect?: 'reset' | 'halve';
   /** 레이드 중 신의 체력 회복 (최대 체력 대비 비율) */
   healRatio?: number;
+  /** 광역: 필드의 모든 몬스터를 때린다 (없으면 가장 가까운 한 마리) */
+  aoe?: boolean;
 }
 
 export const SKILLS: Record<SkillId, SkillInfo> = {
@@ -200,6 +240,7 @@ export const SKILLS: Record<SkillId, SkillInfo> = {
     damageMultiplier: 8,
     hits: 4,
     hitInterval: 130,
+    aoe: true,
   },
   zeus_bolt: {
     id: 'zeus_bolt',
@@ -226,6 +267,7 @@ export const SKILLS: Record<SkillId, SkillInfo> = {
     damageMultiplier: 10,
     hits: 5,
     hitInterval: 90,
+    aoe: true,
   },
   zeus_eagle: {
     id: 'zeus_eagle',
@@ -253,6 +295,7 @@ export const SKILLS: Record<SkillId, SkillInfo> = {
     damageMultiplier: 15,
     hits: 8,
     hitInterval: 110,
+    aoe: true,
   },
   poseidon_wave: {
     id: 'poseidon_wave',
@@ -262,6 +305,7 @@ export const SKILLS: Record<SkillId, SkillInfo> = {
     cooldown: 8_000,
     damageMultiplier: 20,
     bossTimeBonus: 5_000,
+    aoe: true,
   },
   poseidon_trident: {
     id: 'poseidon_trident',
@@ -280,6 +324,7 @@ export const SKILLS: Record<SkillId, SkillInfo> = {
     damageMultiplier: 9,
     hits: 6,
     hitInterval: 130,
+    aoe: true,
   },
   poseidon_quake: {
     id: 'poseidon_quake',
@@ -289,6 +334,7 @@ export const SKILLS: Record<SkillId, SkillInfo> = {
     cooldown: 20_000,
     damageMultiplier: 45,
     bossTimeBonus: 5_000,
+    aoe: true,
   },
   poseidon_blessing: {
     id: 'poseidon_blessing',
@@ -309,6 +355,7 @@ export const SKILLS: Record<SkillId, SkillInfo> = {
     hits: 6,
     hitInterval: 170,
     bossTimeBonus: 10_000,
+    aoe: true,
   },
   // ───── 레이드 「기간토마키아」 첫 클리어 보상 ─────
   zeus_gigas: {

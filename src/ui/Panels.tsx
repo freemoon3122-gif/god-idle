@@ -1,6 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { ADULT_LEVEL, formOf, GOD_LEVEL, GODS, SKILLS, TEEN_LEVEL, ULTIMATE_LEVEL, UPGRADES, upgradeCost, xpToNext } from '../game/balance';
+import { ADULT_LEVEL, formOf, GOD_LEVEL, GODS, SKILLS, TEEN_LEVEL, ULTIMATE_LEVEL, UPGRADES, upgradeCost, xpToNext, DIFFICULTIES, STAGES_PER_DIFFICULTY } from '../game/balance';
 import { availableSkills, bulkPlan, canCast, canEnhance, canFuse, formName, ownedPower, skillCooldown, skillLevel } from '../game/engine';
 import { formatNumber } from '../game/format';
 import { GameState, SkillId, UpgradeId } from '../game/types';
@@ -29,6 +29,34 @@ export function StatusBar({ state }: { state: GameState }) {
       <Text style={styles.xpText}>
         EXP {formatNumber(state.xp)} / {formatNumber(need)}
       </Text>
+    </View>
+  );
+}
+
+/** 난이도 선택: 5000스테이지를 깨면 다음 난이도가 열린다 */
+export function DifficultyBar({ state, onChange }: { state: GameState; onChange: (d: number) => void }) {
+  return (
+    <View style={styles.diffRow}>
+      {DIFFICULTIES.map((d, i) => {
+        const locked = i > state.unlockedDifficulty;
+        const active = i === state.difficulty;
+        const best = i === state.difficulty ? state.maxWave : state.bestStages[i] ?? 0;
+        return (
+          <Pressable
+            key={d.name}
+            onPress={() => onChange(i)}
+            disabled={locked || active || !!state.raid}
+            accessibilityRole="button"
+            style={[styles.diff, active && { backgroundColor: d.color, borderColor: d.color }, locked && { opacity: 0.4 }]}
+          >
+            <Text style={[styles.diffName, active && { color: '#fff' }, !active && { color: d.color }]}>
+              {locked ? '🔒 ' : ''}
+              {d.name}
+            </Text>
+            <Text style={[styles.diffBest, active && { color: '#fff' }]}>{locked ? `${STAGES_PER_DIFFICULTY} 클리어` : `${best}/${STAGES_PER_DIFFICULTY}`}</Text>
+          </Pressable>
+        );
+      })}
     </View>
   );
 }
@@ -252,6 +280,10 @@ const styles = StyleSheet.create({
   level: { color: colors.text, fontSize: 22, fontWeight: '900' },
   form: { color: colors.subText, fontSize: 15, fontWeight: '700' },
   gold: { color: colors.gold, fontSize: 18, fontWeight: '800' },
+  diffRow: { flexDirection: 'row', gap: 6, marginBottom: 8 },
+  diff: { flex: 1, borderWidth: 1.5, borderColor: colors.border, borderRadius: 10, paddingVertical: 6, alignItems: 'center', backgroundColor: colors.panel },
+  diffName: { fontWeight: '900', fontSize: 13 },
+  diffBest: { color: colors.subText, fontSize: 10, fontWeight: '700', marginTop: 1 },
   currency: { color: colors.text, fontSize: 13, fontWeight: '800', marginTop: 2 },
   skillLv: { color: colors.gold, fontWeight: '900' },
   xpTrack: { height: 8, borderRadius: 4, backgroundColor: colors.panelLight, marginTop: 8 },

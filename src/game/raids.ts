@@ -129,8 +129,8 @@ export function raidPhases(id: RaidId, god: GodId | null): RaidPhase[] {
 // 입장권은 실패할 때만 쓴다 (클리어하면 돌려준다) → 쉬운 단계는 한 번에 쭉 올라가고, 막히는 단계에서 하루 3번 도전.
 // 신의 체력은 레벨이 오를수록 늘어난다 (100 × 1.5^((레벨−3000)/1000)) → 성장하면 다시 따라잡을 수 있다.
 
-export const STAGE_WAVE_STEP = 8;
-const ANCHOR_WAVE: Record<RaidId, number> = { gigantomachy: 350, typhoeus: 510 }; // 단계 0의 기준 웨이브
+export const STAGE_WAVE_STEP = 40; // 레이드 한 단계 = 메인 스테이지 40개만큼 (예전 웨이브 8개)
+const ANCHOR_WAVE: Record<RaidId, number> = { gigantomachy: 1750, typhoeus: 2550 } // 메인 스테이지 번호 (예전 웨이브 350·510); // 단계 0의 기준 웨이브
 const BASE_ATTACK: Record<RaidId, number> = { gigantomachy: 3, typhoeus: 4 };
 export const ATTACK_GROWTH = 1.45;
 export const DEFENSE_BASE = 20;

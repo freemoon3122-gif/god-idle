@@ -35,12 +35,22 @@ let farmingSince = 0;
 let elapsed = 0;
 const milestones: string[] = [];
 const MILESTONE_LEVELS = [1000, 2000, 3000, 10000];
+const MILESTONE_STAGES = [500, 1000, 2500, 5000];
 const reached = new Set<number>();
+let deaths = 0; // 신이 쓰러진 횟수
 
 for (const minutes of CHECKPOINTS_MIN) {
   while (elapsed < minutes * 60_000) {
-    s = tick(s, DT).state;
+    const r = tick(s, DT);
+    s = r.state;
+    if (r.heroDown) deaths++;
     elapsed += DT;
+    for (const st of MILESTONE_STAGES) {
+      if (s.maxWave >= st && !reached.has(-st)) {
+        reached.add(-st);
+        milestones.push(`스테이지 ${st} 도달: ${(elapsed / 60_000).toFixed(1)}분`);
+      }
+    }
     // 레벨은 tick뿐 아니라 스킬로 처치할 때도 오르므로, 이전 값과 비교하지 않고 "처음 넘은 순간"을 기록한다
     for (const lv of MILESTONE_LEVELS) {
       if (s.level >= lv && !reached.has(lv)) {
@@ -79,3 +89,4 @@ for (const minutes of CHECKPOINTS_MIN) {
   );
 }
 console.log(milestones.join('\n'));
+console.log(`쓰러진 횟수: ${deaths}`);

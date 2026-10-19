@@ -6,7 +6,12 @@ import {
   CRIT_MULTIPLIER,
   findUpgrade,
   FORM_INFO,
+  chapterOf,
+  DIFFICULTIES,
   formOf,
+  goldMultiplier,
+  STAGES_PER_DIFFICULTY,
+  STAGE_TO_WAVE,
   GOD_LEVEL,
   LEVEL_SCALE,
   GODS,
@@ -72,13 +77,31 @@ import {
   skillDamageBonus,
   skillUpgradeCost,
 } from './economy';
-import { ActionResult, Form, GameState, GodId, Hit, Monster, QueuedHit, RaidId, RaidResult, RaidState, SkillId, UpgradeId } from './types';
+import {
+  BOSS_SPEED,
+  clampHero,
+  CONTACT_RANGE,
+  distance,
+  HERO_HP_PER_DPS,
+  HERO_REGEN,
+  HERO_SPEED,
+  HERO_START,
+  MONSTER_ATTACK_INTERVAL,
+  MONSTER_SPEED,
+  nearestMonster,
+  newHero,
+  spawnWave,
+} from './field';
+import { ActionResult, FieldMonster, Form, GameState, GodId, Hit, Monster, MoveInput, QueuedHit, RaidId, RaidResult, RaidState, SkillId, UpgradeId } from './types';
 import { FUSE_COST, nextRarity, randomWeaponOf, Rarity, rollWeaponDrop, WEAPON_LIST, WeaponId, weaponPower, WEAPONS } from './weapons';
 
 export type Rng = () => number;
 
-/** 2: 레벨을 10배로 늘림 (아기 1~999, 청소년 1000~, 성인 2000~, 신 3000~) */
-export const SAVE_VERSION = 2;
+/**
+ * 2: 레벨을 10배로 늘림 (아기 1~999, 청소년 1000~, 성인 2000~, 신 3000~)
+ * 3: 필드 전투 (한 스테이지 = 몬스터 무리 하나, 예전 웨이브 1개 = 스테이지 5개), 난이도 4개
+ */
+export const SAVE_VERSION = 3;
 
 /*
  * 게임 규칙. UI가 없는 순수 함수들이라 Node에서 그대로 테스트할 수 있다.
@@ -96,9 +119,15 @@ export function newGame(now: number): GameState {
     god: null,
     wave: 1,
     maxWave: 1,
+    difficulty: 0,
+    unlockedDifficulty: 0,
+    bestStages: [1, 0, 0, 0],
+    storySeen: [0, 0, 0, 0],
+    hero: newHero(),
     gold: 0,
     levels: { damage: 0, speed: 0, crit: 0, gold: 0 },
-    monster: spawnMonster(1),
+    monsters: spawnWave(1, 0, 0, Math.random),
+    nextMonsterId: 100,
     bossTimeLeft: null,
     bossBonusLeft: MAX_TIME_BONUS,
     farming: false,
@@ -131,6 +160,27 @@ export function migrate(saved: GameState): GameState {
   if ((saved.version ?? 1) < 2) {
     const level = Math.max(saved.level * LEVEL_SCALE, saved.god ? GOD_LEVEL : 1);
     saved = { ...saved, version: SAVE_VERSION, level, xp: 0 };
+  }
+  // 버전 2 저장: 예전 웨이브 W → 스테이지 (W−1)×5+1 (같은 강함), 필드 전투 상태를 새로 만든다
+  if (saved.version < 3) {
+    const toStage = (w: number) => Math.min(STAGES_PER_DIFFICULTY, Math.round((Math.max(1, w) - 1) / STAGE_TO_WAVE) + 1);
+    const wave = toStage(saved.wave);
+    const maxWave = toStage(saved.maxWave);
+    saved = {
+      ...saved,
+      version: SAVE_VERSION,
+      wave,
+      maxWave,
+      difficulty: 0,
+      unlockedDifficulty: 0,
+      bestStages: [maxWave, 0, 0, 0],
+      storySeen: [chapterOf(wave), 0, 0, 0], // 지금 장의 스토리는 한 번 보여 준다
+      hero: newHero(),
+      monsters: spawnWave(wave, 0, 0, Math.random),
+      nextMonsterId: 100,
+      bossTimeLeft: isBossWave(wave) ? BOSS_TIME_LIMIT : null,
+      farming: isBossWave(wave) ? false : saved.farming,
+    };
   }
   return {
     ...saved,
@@ -206,6 +256,11 @@ export function critMultiplier(s: GameState): number {
   return s.god === 'poseidon' ? 4 : CRIT_MULTIPLIER;
 }
 
+/** 필드에서 신의 최대 체력 = 초당 피해 × 40 (강해질수록 튼튼해진다) */
+export function heroMaxHp(s: GameState): number {
+  return averageDps(s) * HERO_HP_PER_DPS;
+}
+
 /** 평균 초당 피해량(DPS). 치명타 기대값 포함, 버프 제외 (오프라인 계산용) */
 export function averageDps(s: GameState): number {
   const crit = critChance(s, false);
@@ -222,8 +277,11 @@ export function formName(s: GameState): string {
 
 // ───────────── 행동 ─────────────
 
-/** dt(ms)만큼 시간을 흘린다. 자동 공격, 쿨타임, 버프, 보스 타이머가 여기서 처리된다. */
-export function tick(state: GameState, dt: number, rng: Rng = Math.random): ActionResult {
+/**
+ * dt(ms)만큼 시간을 흘린다. 이동, 몬스터의 접근·공격, 자동 공격, 쿨타임, 버프, 보스 타이머가 여기서 처리된다.
+ * move: 조이스틱 입력 (없으면 가만히 서서 자동 공격)
+ */
+export function tick(state: GameState, dt: number, rng: Rng = Math.random, move: MoveInput | null = null): ActionResult {
   let s: GameState = { ...state, skillCooldowns: decreaseCooldowns(state.skillCooldowns, dt) };
   if (s.buff) s.buff = s.buff.timeLeft > dt ? { ...s.buff, timeLeft: s.buff.timeLeft - dt } : null;
 
@@ -238,23 +296,39 @@ export function tick(state: GameState, dt: number, rng: Rng = Math.random): Acti
     }
   }
 
-  // 1) 연타 스킬의 예약된 타격: 시간이 된 것부터 차례로 들어간다
+  // 1) 이동: 조이스틱 방향으로 움직인다. 움직이는 동안은 공격하지 않는다
+  s = moveHero(s, dt, move);
+
+  // 2) 몬스터: 신에게 다가와 붙으면 공격 (레이드 중에는 필드가 멈춰 있다)
+  if (!s.raid) {
+    s = fieldTick(s, dt, result, rng);
+    if (result.heroDown) {
+      result.state = s;
+      return result;
+    }
+  }
+
+  // 3) 연타 스킬의 예약된 타격: 시간이 된 것부터 차례로 들어간다
   if (s.queuedHits.length > 0) {
     const queue = s.queuedHits.map((q) => ({ ...q, dueIn: q.dueIn - dt }));
     s.queuedHits = queue.filter((q) => q.dueIn > 0);
-    for (const q of queue.filter((q) => q.dueIn <= 0)) s = hitMonster(s, skillHit(s, q, rng), result, rng);
+    for (const q of queue.filter((q) => q.dueIn <= 0)) s = skillStrike(s, q, result, rng);
   }
 
-  // 2) 자동 공격: 쿨타임이 0 이하가 될 때마다 한 번씩 공격
-  s.attackCooldown -= dt;
-  while (s.attackCooldown <= 0) {
-    s.attackCooldown += 1000 / attacksPerSecond(s);
-    if (s.raid && s.raid.stunLeft > 0) continue; // 브레스에 맞아 기절: 자동 공격을 못 한다
-    s = hitMonster(s, normalHit(s, 'auto', rng), result, rng);
+  // 4) 자동 공격: 가만히 서 있을 때만, 쿨타임이 0 이하가 될 때마다 가장 가까운 적을 한 번씩
+  if (s.hero.moving) {
+    s.attackCooldown = Math.max(0, s.attackCooldown - dt); // 멈추자마자 바로 쏠 수 있게 충전만 해 둔다
+  } else {
+    s.attackCooldown -= dt;
+    while (s.attackCooldown <= 0) {
+      s.attackCooldown += 1000 / attacksPerSecond(s);
+      if (s.raid && s.raid.stunLeft > 0) continue; // 브레스에 맞아 기절: 자동 공격을 못 한다
+      s = hitMonster(s, normalHit(s, 'auto', rng), result, rng);
+    }
   }
 
-  // 3) 보스 제한 시간 (레이드 중에는 메인 전투가 멈춰 있다)
-  if (!s.raid && s.bossTimeLeft !== null && !result.killed) {
+  // 5) 보스 제한 시간 (레이드 중에는 메인 전투가 멈춰 있다)
+  if (!s.raid && s.bossTimeLeft !== null && s.monsters.some((m) => m.isBoss)) {
     s.bossTimeLeft -= dt;
     if (s.bossTimeLeft <= 0) {
       s = { ...enterWave(s, s.wave - 1), farming: true }; // 한 웨이브 뒤로 가서 골드를 모은다
@@ -367,7 +441,7 @@ export function castSkill(state: GameState, id: SkillId, rng: Rng = Math.random)
       index,
       total,
     }));
-    s = hitMonster(s, skillHit(s, hits[0], rng), result, rng);
+    s = skillStrike(s, hits[0], result, rng);
     s.queuedHits = [...s.queuedHits, ...hits.slice(1)];
   }
 
@@ -502,8 +576,34 @@ export function buyUpgradeBulk(state: GameState, id: UpgradeId, maxCount: number
 
 /** 보스에게 졌을 때 누르는 "보스 재도전" 버튼 */
 export function challengeBoss(state: GameState): GameState {
-  if (!state.farming) return state;
+  if (!state.farming || state.wave + 1 > STAGES_PER_DIFFICULTY) return state;
   return enterWave({ ...state, farming: false }, state.wave + 1);
+}
+
+// ───────────── 난이도 · 스토리 ─────────────
+
+/** 난이도 바꾸기: 지금 기록을 저장하고, 고른 난이도의 최고 스테이지에서 이어 한다 */
+export function changeDifficulty(state: GameState, d: number): GameState {
+  if (state.raid || d === state.difficulty || d < 0 || d > state.unlockedDifficulty) return state;
+  const bestStages = [...state.bestStages];
+  bestStages[state.difficulty] = Math.max(bestStages[state.difficulty] ?? 0, state.maxWave);
+  const stage = Math.max(1, bestStages[d] ?? 0);
+  const s: GameState = { ...state, bestStages, difficulty: d, maxWave: stage, farming: false, queuedHits: [], hero: newHero() };
+  // 보스 스테이지에서 이어 하면 바로 보스전이 되므로, 하나 전에서 파밍 상태로 시작
+  return isBossWave(stage) ? { ...enterWave(s, Math.max(1, stage - 1)), farming: stage > 1 } : enterWave(s, stage);
+}
+
+/** 아직 보지 않은 새 장(1~10)에 들어와 있으면 그 장 번호 */
+export function pendingChapter(s: GameState): number | null {
+  if (s.raid) return null;
+  const ch = chapterOf(s.wave) + 1;
+  return ch > (s.storySeen[s.difficulty] ?? 0) ? ch : null;
+}
+
+export function markChapterSeen(s: GameState, chapter: number): GameState {
+  const storySeen = [...s.storySeen];
+  storySeen[s.difficulty] = Math.max(storySeen[s.difficulty] ?? 0, chapter);
+  return { ...s, storySeen };
 }
 
 // ───────────── 오프라인 보상 ─────────────
@@ -522,11 +622,11 @@ export function offlineReward(s: GameState, now: number): OfflineReward | null {
   const elapsed = Math.min(Math.max(0, now - s.savedAt), OFFLINE_CAP_MS);
   if (elapsed < 60_000) return null; // 1분 미만은 보상 없음
   const farmWave = isBossWave(s.wave) ? s.wave - 1 : s.wave;
-  const secondsPerKill = Math.max(monsterHp(farmWave) / averageDps(s), 1 / attacksPerSecond(s, false));
+  const secondsPerKill = Math.max(monsterHp(farmWave, s.difficulty) / averageDps(s), 1 / attacksPerSecond(s, false));
   const kills = elapsed / 1000 / secondsPerKill;
   return {
     minutes: Math.floor(elapsed / 60_000),
-    gold: Math.floor(kills * OFFLINE_EFFICIENCY * monsterGold(farmWave, s.levels.gold)),
+    gold: Math.floor(kills * OFFLINE_EFFICIENCY * monsterGold(farmWave, s.levels.gold, s.difficulty)),
     xp: Math.floor(kills * OFFLINE_XP_EFFICIENCY * xpForKill(farmWave)),
   };
 }
@@ -539,15 +639,88 @@ export function applyOfflineReward(state: GameState, reward: OfflineReward): Act
 
 // ───────────── 내부 함수 ─────────────
 
-function emptyResult(state: GameState): ActionResult {
-  return { state, hits: [], casts: [], drops: [], raidEvents: [], killed: false, bossFailed: false, levelUps: 0, evolvedTo: null, diamonds: 0 };
+/** 아무 일도 일어나지 않은 결과 (강화 구매처럼 연출이 필요 없는 상태 변경에 쓴다) */
+export function plainResult(state: GameState, drops: WeaponId[] = []): ActionResult {
+  return { ...emptyResult(state), drops };
 }
 
-export function spawnMonster(wave: number): Monster {
-  const { kind, name } = monsterKindFor(wave);
-  const hp = monsterHp(wave);
-  const isBoss = isBossWave(wave);
-  return { kind, name: isBoss ? `보스 ${name}` : name, hp, maxHp: hp, isBoss };
+function emptyResult(state: GameState): ActionResult {
+  return {
+    state,
+    hits: [],
+    casts: [],
+    drops: [],
+    raidEvents: [],
+    killed: false,
+    bossFailed: false,
+    levelUps: 0,
+    evolvedTo: null,
+    diamonds: 0,
+    killedIds: [],
+    heroDamage: 0,
+    heroDown: false,
+    difficultyUnlocked: null,
+  };
+}
+
+// ───────────── 필드 전투 ─────────────
+
+function moveHero(s: GameState, dt: number, move: MoveInput | null): GameState {
+  const len = move ? Math.hypot(move.x, move.y) : 0;
+  if (!move || len < 0.15) return s.hero.moving ? { ...s, hero: { ...s.hero, moving: false } } : s;
+  const k = (HERO_SPEED * Math.min(1, len) * dt) / 1000 / len;
+  // 화면 위쪽 = 깊이 y가 커지는 방향. 깊이는 0~1이라 x와 같은 빠르기로 느껴지게 40으로 나눈다
+  const p = clampHero(s.hero.x + move.x * k, s.hero.y - (move.y * k) / 40);
+  return { ...s, hero: { ...s.hero, ...p, moving: true } };
+}
+
+/** 몬스터가 신에게 다가가고, 붙으면 1초마다 공격한다. 붙은 몬스터가 없으면 신의 체력이 회복된다 */
+function fieldTick(s: GameState, dt: number, result: ActionResult, rng: Rng): GameState {
+  const hero = s.hero;
+  const maxHp = heroMaxHp(s);
+  let damage = 0;
+  let touching = false;
+  const monsters = s.monsters.map((m) => {
+    const d = distance(hero.x, hero.y, m.x, m.y);
+    if (d <= CONTACT_RANGE) {
+      touching = true;
+      const attackCd = m.attackCd - dt;
+      if (attackCd > 0) return { ...m, attackCd };
+      damage += m.attack;
+      return { ...m, attackCd: attackCd + MONSTER_ATTACK_INTERVAL };
+    }
+    // 다가가기: 접촉 거리 바로 앞까지만 (겹치지 않게)
+    const step = Math.min(d - CONTACT_RANGE * 0.9, ((m.isBoss ? BOSS_SPEED : MONSTER_SPEED) * dt) / 1000);
+    const dx = (hero.x - m.x) / d;
+    const dy = ((hero.y - m.y) * 40) / d;
+    return { ...m, x: m.x + dx * step, y: Math.min(1, Math.max(0, m.y + (dy * step) / 40)) };
+  });
+  const lost = Math.min(1, damage / maxHp);
+  const hp = touching ? hero.hp - lost : Math.min(1, hero.hp + (HERO_REGEN * dt) / 1000);
+  result.heroDamage = lost;
+  let next: GameState = { ...s, monsters, hero: { ...hero, hp } };
+  if (hp > 0) return next;
+
+  // 쓰러졌다: 보스 스테이지면 한 스테이지 뒤로 가서 파밍, 아니면 같은 스테이지를 처음부터
+  result.heroDown = true;
+  next = { ...next, hero: newHero(), queuedHits: [] };
+  if (isBossWave(s.wave)) {
+    result.bossFailed = true;
+    return { ...enterWave(next, Math.max(1, s.wave - 1), rng), farming: true };
+  }
+  return enterWave(next, s.wave, rng);
+}
+
+/** 스킬 한 타: 광역이면 모든 몬스터, 아니면 가장 가까운 한 마리 (레이드는 보스 하나) */
+function skillStrike(s: GameState, q: QueuedHit, result: ActionResult, rng: Rng): GameState {
+  if (!s.raid && SKILLS[q.skill].aoe) {
+    const ids = s.monsters.map((m) => m.id);
+    ids.forEach((id, i) => {
+      if (s.monsters.some((m) => m.id === id)) s = hitMonster(s, { ...skillHit(s, q, rng), targetId: id, secondary: i > 0 }, result, rng);
+    });
+    return s;
+  }
+  return hitMonster(s, skillHit(s, q, rng), result, rng);
 }
 
 function normalHit(s: GameState, source: Hit['source'], rng: Rng): Hit {
@@ -562,32 +735,58 @@ function skillHit(s: GameState, q: QueuedHit, rng: Rng): Hit {
   return { ...hit, damage: hit.damage * q.multiplier, combo: { index: q.index, total: q.total } };
 }
 
-/** 몬스터에게 피해를 주고, 쓰러뜨리면 보상을 받고 다음 몬스터로 넘어간다. result에 기록을 남긴다. */
+/**
+ * 몬스터에게 피해를 준다. 대상이 정해져 있지 않으면 가장 가까운 몬스터.
+ * 쓰러뜨리면 보상을 받고, 무리를 전부 쓰러뜨리면 다음 스테이지로. result에 기록을 남긴다.
+ */
 function hitMonster(state: GameState, hit: Hit, result: ActionResult, rng: Rng): GameState {
   if (state.raid) return hitRaid(state, hit, result, rng);
-  result.hits.push(hit);
-  const hp = state.monster.hp - hit.damage;
-  if (hp > 0) return { ...state, monster: { ...state.monster, hp } };
+  const target = (hit.targetId !== undefined && state.monsters.find((m) => m.id === hit.targetId)) || nearestMonster(state.hero, state.monsters);
+  if (!target) return state;
+  result.hits.push({ ...hit, targetId: target.id });
+  const hp = target.hp - hit.damage;
+  if (hp > 0) return { ...state, monsters: state.monsters.map((m) => (m.id === target.id ? { ...m, hp } : m)) };
+  return killMonster(state, target, result, rng);
+}
 
+function killMonster(state: GameState, m: FieldMonster, result: ActionResult, rng: Rng): GameState {
   result.killed = true;
-  // 스테이지 보스를 처음 잡으면 다이아 (기록 웨이브의 보스를 파밍이 아닌 상태로 잡았을 때)
-  const firstBossKill = state.monster.isBoss && !state.farming && state.wave >= state.maxWave;
-  const diamonds = firstBossKill ? BOSS_FIRST_KILL_DIAMONDS : 0;
-  result.diamonds += diamonds;
+  result.killedIds.push(m.id);
   let s: GameState = {
     ...state,
-    gold: state.gold + monsterGold(state.wave, state.levels.gold),
-    diamonds: state.diamonds + diamonds,
+    monsters: state.monsters.filter((x) => x.id !== m.id),
+    gold: state.gold + Math.ceil(m.gold * goldMultiplier(state.levels.gold)),
     totalKills: state.totalKills + 1,
   };
-  s = gainXp(s, xpForKill(state.wave), result);
+  s = gainXp(s, Math.ceil(m.xp), result);
+  return s.monsters.length ? s : clearWave(s, result, rng);
+}
 
-  const drop = rollWeaponDrop(state.wave, state.monster.isBoss, rng);
+/** 무리를 전부 쓰러뜨렸다: 무기 드롭(스테이지당 한 번), 보스 첫 처치 다이아, 5000스테이지면 다음 난이도 */
+function clearWave(state: GameState, result: ActionResult, rng: Rng): GameState {
+  const stage = state.wave;
+  const boss = isBossWave(stage);
+  let s = state;
+  const drop = rollWeaponDrop(stage, boss, rng);
   if (drop) {
     s = addWeapon(s, drop);
     result.drops.push(drop);
   }
-  return enterWave(s, s.farming ? s.wave : s.wave + 1);
+  const firstBossKill = boss && !state.farming && stage >= state.maxWave;
+  const lastStage = stage >= STAGES_PER_DIFFICULTY;
+  const diamonds = firstBossKill && !(lastStage && state.unlockedDifficulty > state.difficulty) ? BOSS_FIRST_KILL_DIAMONDS : 0;
+  result.diamonds += diamonds;
+  s = { ...s, diamonds: s.diamonds + diamonds };
+
+  if (lastStage && boss) {
+    // 마지막 스테이지 클리어 → 다음 난이도 열림. 이 난이도는 마지막 바로 전 스테이지에서 파밍
+    if (s.difficulty < DIFFICULTIES.length - 1 && s.unlockedDifficulty <= s.difficulty) {
+      s = { ...s, unlockedDifficulty: s.difficulty + 1 };
+      result.difficultyUnlocked = s.difficulty + 1;
+    }
+    return { ...enterWave(s, stage - 1, rng), farming: true, maxWave: STAGES_PER_DIFFICULTY };
+  }
+  return enterWave(s, s.farming ? s.wave : s.wave + 1, rng);
 }
 
 function gainXp(state: GameState, amount: number, result: ActionResult): GameState {
@@ -604,12 +803,16 @@ function gainXp(state: GameState, amount: number, result: ActionResult): GameSta
   return { ...state, level, xp };
 }
 
-function enterWave(state: GameState, wave: number): GameState {
+function enterWave(state: GameState, wave: number, rng: Rng = Math.random): GameState {
+  const monsters = spawnWave(wave, state.difficulty, state.nextMonsterId, rng);
+  // 신이 오른쪽에 가 있으면 몬스터는 왼쪽에서 나온다 (신 바로 위에 생기지 않게)
+  const fromLeft = state.hero.x > 55;
   return {
     ...state,
     wave,
     maxWave: Math.max(state.maxWave, wave),
-    monster: spawnMonster(wave),
+    monsters: fromLeft ? monsters.map((m) => ({ ...m, x: 100 - m.x })) : monsters,
+    nextMonsterId: state.nextMonsterId + monsters.length,
     bossTimeLeft: isBossWave(wave) ? BOSS_TIME_LIMIT : null,
     bossBonusLeft: MAX_TIME_BONUS,
   };

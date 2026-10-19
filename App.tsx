@@ -7,6 +7,7 @@ import {
   ActionResult,
   GameState,
   GodId,
+  MoveInput,
   RaidId,
   SkillId,
   UpgradeId,
@@ -17,6 +18,7 @@ import {
   buyUpgradeBulk,
   castSkill,
   challengeBoss,
+  changeDifficulty,
   chooseGod,
   devAddDiamonds,
   devAddGold,
@@ -26,24 +28,29 @@ import {
   dismissRaidResult,
   enhanceWeapon,
   equipWeapon,
+  formName,
   fuseWeapon,
   gacha,
   leaveRaid,
+  markChapterSeen,
   needsGodChoice,
   newGame,
   offlineReward,
+  pendingChapter,
+  plainResult,
   OfflineReward,
   startRaid,
   tap,
   tick,
   upgradeSkill,
 } from './src/game/engine';
-import { StoryLine, storyFor } from './src/game/story';
+import { chapterStory, StoryLine, storyFor } from './src/game/story';
 import { loadGame, saveGame } from './src/storage/save';
 import { BattleHandle, BattleView } from './src/ui/BattleView';
 import { DevPanel } from './src/ui/DevPanel';
 import { EvolveModal, GodChoiceModal, OfflineModal } from './src/ui/Modals';
-import { SkillBar, StatusBar as GameStatusBar, UpgradeList, WeaponPanel } from './src/ui/Panels';
+import { DifficultyBar, SkillBar, StatusBar as GameStatusBar, UpgradeList, WeaponPanel } from './src/ui/Panels';
+import { heroSprite } from './src/ui/sprites';
 import { DailyPanel, RaidPanel, RaidResultModal, StoryModal } from './src/ui/RaidUI';
 import { GachaResultModal, ShopPanel, SkillUpgradePanel } from './src/ui/ShopUI';
 import { colors } from './src/ui/theme';
@@ -71,6 +78,8 @@ export default function App() {
   const [story, setStory] = useState<{ lines: StoryLine[]; index: number } | null>(null);
   const storyRef = useRef(false);
   const [pulls, setPulls] = useState<WeaponId[] | null>(null); // 무기 뽑기 결과
+  const moveRef = useRef<MoveInput | null>(null); // 조이스틱 입력 (게임 루프가 매 tick 읽어 간다)
+  const [dragging, setDragging] = useState(false); // 조이스틱을 끄는 동안은 화면 스크롤을 막는다
 
   /** 엔진이 돌려준 결과를 화면 상태에 반영한다. 모든 행동이 이 함수를 거친다. */
   const apply = useCallback((r: ActionResult) => {
@@ -91,6 +100,16 @@ export default function App() {
       }
     }
   }, []);
+
+  // 새 장(500스테이지마다)에 처음 들어오면 그 장의 스토리를 보여 준다
+  useEffect(() => {
+    if (!game || storyRef.current) return;
+    const ch = pendingChapter(game);
+    if (ch === null) return;
+    storyRef.current = true;
+    setStory({ lines: chapterStory(ch, heroSprite(game), formName(game)), index: 0 });
+    if (gameRef.current) apply(plainResult(markChapterSeen(gameRef.current, ch)));
+  }, [game?.wave, game?.difficulty, game?.raid]);
 
   const nextLine = () =>
     setStory((cur) => {
@@ -131,7 +150,7 @@ export default function App() {
       const now = Date.now();
       const dt = Math.min(now - last, 1000); // 탭이 잠들었다 깨어나도 한 번에 너무 많이 진행하지 않게
       last = now;
-      if (gameRef.current && !storyRef.current) apply(tick(gameRef.current, dt)); // 컷신 중에는 시간이 멈춘다
+      if (gameRef.current && !storyRef.current) apply(tick(gameRef.current, dt, Math.random, moveRef.current)); // 컷신 중에는 시간이 멈춘다
       if (now - lastSave > SAVE_EVERY_MS) {
         save();
         lastSave = now;
@@ -156,7 +175,7 @@ export default function App() {
   /** 연출이 필요 없는 단순한 상태 변경 (강화 구매, 장착 등) */
   const act = (fn: (s: GameState) => GameState, drops: WeaponId[] = []) => {
     if (!gameRef.current) return;
-    apply({ state: fn(gameRef.current), hits: [], casts: [], drops, killed: false, bossFailed: false, levelUps: 0, evolvedTo: null, raidEvents: [], diamonds: 0 });
+    apply(plainResult(fn(gameRef.current), drops));
   };
 
   const enterRaid = (id: RaidId) => {
@@ -184,14 +203,17 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <SafeAreaView style={styles.root}>
-        <ScrollView ref={scrollRef} contentContainerStyle={styles.content}>
+        <ScrollView ref={scrollRef} scrollEnabled={!dragging} contentContainerStyle={styles.content}>
           <GameStatusBar state={game} />
+          <DifficultyBar state={game} onChange={(d) => act((s) => changeDifficulty(s, d))} />
           <BattleView
             ref={battleRef}
             state={game}
             onTap={() => gameRef.current && apply(tap(gameRef.current))}
             onChallengeBoss={() => act(challengeBoss)}
             onLeaveRaid={() => gameRef.current && apply(leaveRaid(gameRef.current))}
+            onMove={(m) => (moveRef.current = m)}
+            onDragging={setDragging}
           />
           <SkillBar state={game} onCast={(id: SkillId) => gameRef.current && apply(castSkill(gameRef.current, id))} />
           <DailyPanel state={game} onEnter={enterRaid} />

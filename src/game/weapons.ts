@@ -114,7 +114,7 @@ export function randomWeaponOf(rarity: Rarity, rng: () => number): WeaponId {
 export function rollWeaponDrop(wave: number, isBoss: boolean, rng: () => number): WeaponId | null {
   if (rng() >= dropChance(isBoss)) return null;
 
-  const highBonus = 1 + wave / 200;
+  const highBonus = 1 + wave / 1000; // wave = 스테이지 번호 (예전 웨이브 200마다 +1)
   const weights = RARITY_ORDER.map((r) => RARITY_INFO[r].weight * (r === 'legend' || r === 'transcendent' ? highBonus : 1));
   const total = weights.reduce((a, b) => a + b, 0);
   let roll = rng() * total;

@@ -40,6 +40,31 @@ export interface Monster {
   isBoss: boolean;
 }
 
+/** 필드 위의 몬스터: 위치가 있고, 신에게 다가와 공격한다 (좌표는 field.ts 참고) */
+export interface FieldMonster extends Monster {
+  id: number;
+  x: number;
+  y: number;
+  attack: number; // 한 번 공격할 때의 피해 (체력에 비례 → 난이도에 따라 제곱)
+  attackCd: number;
+  gold: number; // 쓰러뜨리면 주는 골드·경험치
+  xp: number;
+}
+
+/** 신의 위치와 체력. 체력은 최대 체력 대비 비율(0~1) */
+export interface Hero {
+  x: number;
+  y: number;
+  hp: number;
+  moving: boolean; // 움직이는 중이면 자동 공격을 하지 않는다
+}
+
+/** 이동 입력 (조이스틱 방향, 길이 0~1) */
+export interface MoveInput {
+  x: number;
+  y: number;
+}
+
 /** 지속 효과가 있는 스킬이 켜져 있는 동안의 상태 */
 export interface Buff {
   skill: SkillId;
@@ -110,11 +135,17 @@ export interface GameState {
   level: number;
   xp: number; // 현재 레벨에서 모은 경험치
   god: GodId | null; // Lv.3000에 고르기 전에는 null
-  wave: number; // 지금 싸우는 몬스터 번호. 10의 배수가 보스
-  maxWave: number;
+  wave: number; // 지금 스테이지 (몬스터 무리 하나 = 한 스테이지). 10의 배수가 보스
+  maxWave: number; // 지금 난이도에서 도달한 최고 스테이지
+  difficulty: number; // 0 쉬움, 1 보통, 2 어려움, 3 극악
+  unlockedDifficulty: number; // 들어갈 수 있는 가장 높은 난이도
+  bestStages: number[]; // 난이도별 최고 스테이지 (난이도를 바꿀 때 이어서 하려고)
+  storySeen: number[]; // 난이도별로 본 마지막 장(1~10). 새 장에 들어가면 스토리를 보여 준다
+  hero: Hero;
   gold: number;
   levels: Record<UpgradeId, number>; // 강화 레벨
-  monster: Monster;
+  monsters: FieldMonster[]; // 지금 필드의 몬스터들
+  nextMonsterId: number;
   bossTimeLeft: number | null; // 보스전 남은 시간(ms). 보스가 아니면 null
   bossBonusLeft: number; // 이번 보스전(또는 레이드)에서 스킬로 더 늘릴 수 있는 시간(ms). 무한히 늘려 버티는 것을 막는다
   farming: boolean; // 보스에게 졌으면 true: 같은 웨이브에서 골드를 모은다
@@ -144,6 +175,10 @@ export interface Hit {
   source: 'auto' | 'tap' | 'heracles' | SkillId;
   /** 연타 스킬이면 몇 번째 타격인지 (화면 연출용) */
   combo?: { index: number; total: number };
+  /** 맞은 몬스터 (화면에서 그 몬스터 위치에 연출을 그린다). 레이드는 없음 */
+  targetId?: number;
+  /** 광역 스킬의 두 번째 이후 대상: 큰 연출은 생략하고 숫자만 */
+  secondary?: boolean;
 }
 
 /** tick(), tap(), castSkill()이 돌려주는 결과: 새 상태 + 이번에 일어난 일들 */
@@ -158,4 +193,8 @@ export interface ActionResult {
   levelUps: number;
   evolvedTo: Form | null; // 이번에 성장 단계가 바뀌었으면 새 단계
   diamonds: number; // 이번에 얻은 다이아 (알림용)
+  killedIds: number[]; // 이번에 쓰러진 몬스터
+  heroDamage: number; // 이번에 신이 받은 피해 (최대 체력 대비)
+  heroDown: boolean; // 신이 쓰러졌는지
+  difficultyUnlocked: number | null; // 새 난이도가 열렸으면 그 번호
 }

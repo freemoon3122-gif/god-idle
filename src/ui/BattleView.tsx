@@ -1,10 +1,12 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
-import { Animated, Easing, LayoutChangeEvent, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated, Easing, LayoutChangeEvent, PanResponder, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { BOSS_TIME_LIMIT, SKILLS, stageLabel } from '../game/balance';
+import { BOSS_TIME_LIMIT, chapterOf, DIFFICULTIES, isBossWave, SKILLS, stageLabel } from '../game/balance';
+import { FIELD_W, nearestMonster } from '../game/field';
+import { CHAPTERS } from '../game/story';
 import { formatNumber } from '../game/format';
 import { defenseMultiplier, RAIDS, raidPhases } from '../game/raids';
-import { ActionResult, GameState, Hit, SkillId } from '../game/types';
+import { ActionResult, FieldMonster, GameState, Hit, MoveInput, SkillId } from '../game/types';
 import { RARITY_INFO, WEAPONS } from '../game/weapons';
 import Svg, { Circle, Defs, RadialGradient, Stop } from 'react-native-svg';
 
@@ -15,11 +17,15 @@ import { heroSprite, skyColors } from './sprites';
 import { colors } from './theme';
 
 const ND = Platform.OS !== 'web';
-const HEIGHT = 330;
+const HEIGHT = 360;
 const GROUND = 34; // 바닥 높이
-const SIDE = 26; // 좌우 여백
-const HERO_SCALE = 4; // 신 스프라이트는 약 24×26칸 → 약 100pt
-const MOUNTED_SCALE = 3.5; // 탈것(구름·상어)을 타면 폭이 넓어지므로 조금 작게
+const DEPTH_PX = 74; // 필드 깊이(y 0~1)가 화면에서 차지하는 높이
+const SIDE = 20; // 좌우 여백
+const HERO_SCALE = 3; // 필드에 여러 마리가 나오므로 예전보다 작게
+const MOUNTED_SCALE = 2.6; // 탈것(구름·상어)을 타면 폭이 넓어지므로 조금 작게
+const MOB_WIDTH = 54; // 일반 몬스터 그림 폭(pt). 스프라이트 크기가 달라도 이 폭에 맞춘다
+const BOSS_WIDTH = 92;
+const STICK_MAX = 46; // 조이스틱 손잡이가 움직이는 최대 거리(pt)
 const MAX_EFFECTS = 70;
 
 /** 부모(App)가 전투 결과를 넘겨 연출을 재생하게 하는 통로 */
@@ -32,6 +38,15 @@ interface Props {
   onTap: () => void;
   onChallengeBoss: () => void;
   onLeaveRaid: () => void;
+  /** 조이스틱 입력 (손을 떼면 null → 멈춰서 자동 공격) */
+  onMove: (move: MoveInput | null) => void;
+  /** 끌고 있는 동안은 바깥 스크롤을 막는다 */
+  onDragging: (dragging: boolean) => void;
+}
+
+/** 몬스터 그림 배율: 스프라이트 원래 크기가 제각각이라 정해진 폭에 맞춘다 */
+function mobScale(m: { kind: string; isBoss: boolean }): number {
+  return (m.isBoss ? BOSS_WIDTH : MOB_WIDTH) / spriteSize(m.kind, 1).w;
 }
 
 
@@ -42,7 +57,7 @@ interface Props {
  *   - 스킬별 이펙트(참격, 번개, 해일, 촉수...)와 튀어오르는 데미지 숫자
  * forwardRef + useImperativeHandle: 부모가 battleRef.current.play(result)로 이 컴포넌트의 함수를 직접 부를 수 있게 한다.
  */
-export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ state, onTap, onChallengeBoss, onLeaveRaid }, ref) {
+export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ state, onTap, onChallengeBoss, onLeaveRaid, onMove, onDragging }, ref) {
   const [width, setWidth] = useState(360);
   const [effects, setEffects] = useState<Effect[]>([]);
   const nextId = useRef(0);
@@ -70,8 +85,15 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
   const heroBodyH = spriteSize(hero, heroScale).h;
   const heroFloat = heroSize.floating ? FLOAT_CELLS * heroScale : 0; // 탈것을 타면 살짝 떠 있다
   const raid = state.raid;
-  const monster = raid?.monster ?? state.monster; // 레이드 중에는 레이드 적과 싸운다
-  const monsterScale = raid ? 4 : monster.isBoss ? 5 : 4; // 레이드 적은 그림 자체가 커서 배율 4
+  // 필드 좌표 → 화면: x는 좌우, y(깊이)는 바닥 띠 안에서 위아래 (뒤에 있을수록 위)
+  const toX = (x: number) => SIDE + 24 + (x / FIELD_W) * (width - 2 * SIDE - 48);
+  const toBottom = (y: number) => GROUND - 14 + y * DEPTH_PX;
+  const heroLeft = toX(state.hero.x) - heroSize.w / 2;
+  const heroBottom = toBottom(state.hero.y) + heroFloat;
+  // 주 대상: 레이드면 레이드 보스, 아니면 신에게 가장 가까운 몬스터
+  const nearest = raid ? null : nearestMonster(state.hero, state.monsters);
+  const monster = raid?.monster ?? nearest ?? { kind: 'slime', name: '', hp: 0, maxHp: 1, isBoss: false };
+  const monsterScale = raid ? 4 : mobScale(monster);
   const monsterSize = spriteSize(monster.kind, monsterScale);
   // 기간토마키아: 헤라클레스가 뒤쪽 바위 언덕 위에서 활을 쏜다
   const heraclesScale = 2.5;
@@ -79,14 +101,75 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
 
   // 좌표 계산 (전투 영역 기준)
   const pos = useRef({ heroX: 0, heroY: 0, monX: 0, monY: 0, monTop: 0, groundY: 0 });
+  // 필드 몬스터의 화면 위치 (연출을 맞은 몬스터 위치에 그리려고 기억해 둔다. 쓰러진 뒤에도 마지막 위치가 남는다)
+  const mobPos = useRef(new Map<number, { monX: number; monY: number; monTop: number }>());
+  for (const m of state.monsters) {
+    const size = spriteSize(m.kind, mobScale(m));
+    const b = toBottom(m.y);
+    mobPos.current.set(m.id, { monX: toX(m.x), monY: HEIGHT - b - size.h / 2, monTop: HEIGHT - b - size.h });
+  }
   pos.current = {
-    heroX: SIDE + heroSize.w * 0.75,
-    heroY: HEIGHT - GROUND - heroFloat - heroSize.h + heroBodyH * 0.5, // 신의 가슴 높이에서 공격이 나간다
-    monX: width - SIDE - monsterSize.w / 2,
-    monY: HEIGHT - GROUND - monsterSize.h / 2,
-    monTop: HEIGHT - GROUND - monsterSize.h,
+    heroX: heroLeft + heroSize.w * 0.75,
+    heroY: HEIGHT - heroBottom - heroSize.h + heroBodyH * 0.5, // 신의 가슴 높이에서 공격이 나간다
+    ...(raid || !nearest
+      ? {
+          monX: width - SIDE - monsterSize.w / 2,
+          monY: HEIGHT - GROUND - monsterSize.h / 2,
+          monTop: HEIGHT - GROUND - monsterSize.h,
+        }
+      : mobPos.current.get(nearest.id)!),
     groundY: HEIGHT - GROUND,
   };
+  /** 맞은 몬스터의 화면 위치 (없으면 주 대상) */
+  const targetPos = (id?: number) => {
+    const p = pos.current;
+    return { ...p, ...(id !== undefined && !raid ? mobPos.current.get(id) : undefined) };
+  };
+  // 필드 몬스터별 피격 애니메이션 (FieldMonsterView가 등록한다)
+  const mobAnims = useRef(new Map<number, { flash: Animated.Value; knock: Animated.Value }>());
+  // 신의 위치: 엔진은 0.05초마다 위치를 바꾸므로, 그 사이를 부드럽게 이어 준다
+  const heroPosX = useRef(new Animated.Value(heroLeft)).current;
+  const heroPosY = useRef(new Animated.Value(-heroBottom)).current;
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(heroPosX, { toValue: heroLeft, duration: 60, easing: Easing.linear, useNativeDriver: ND }),
+      Animated.timing(heroPosY, { toValue: -heroBottom, duration: 60, easing: Easing.linear, useNativeDriver: ND }),
+    ]).start();
+  }, [heroLeft, heroBottom]);
+
+  // ───────────── 조이스틱: 화면 어디든 누르고 끌면 그 방향으로 움직이고, 손을 떼면 멈춰서 자동 공격 ─────────────
+  const [stick, setStick] = useState<{ ox: number; oy: number; dx: number; dy: number } | null>(null);
+  const cb = useRef({ onMove, onTap, onDragging });
+  cb.current = { onMove, onTap, onDragging };
+  const pan = useRef(
+    (() => {
+      let startAt = 0;
+      const end = (tap: boolean) => {
+        cb.current.onMove(null);
+        cb.current.onDragging(false);
+        setStick(null);
+        if (tap) cb.current.onTap(); // 끌지 않고 짧게 톡 치면 추가 공격
+      };
+      return PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
+        onMoveShouldSetPanResponder: () => true,
+        onPanResponderTerminationRequest: () => false, // 끄는 도중에 스크롤이 손을 뺏어 가지 않게
+        onPanResponderGrant: (e) => {
+          startAt = Date.now();
+          cb.current.onDragging(true);
+          setStick({ ox: e.nativeEvent.locationX, oy: e.nativeEvent.locationY, dx: 0, dy: 0 });
+        },
+        onPanResponderMove: (_, g) => {
+          const len = Math.hypot(g.dx, g.dy);
+          const k = Math.min(1, len / STICK_MAX);
+          cb.current.onMove(len > 6 ? { x: (g.dx / len) * k, y: (g.dy / len) * k } : null);
+          setStick((st) => st && { ...st, dx: len > STICK_MAX ? (g.dx / len) * STICK_MAX : g.dx, dy: len > STICK_MAX ? (g.dy / len) * STICK_MAX : g.dy });
+        },
+        onPanResponderRelease: (_, g) => end(Math.hypot(g.dx, g.dy) < 8 && Date.now() - startAt < 300),
+        onPanResponderTerminate: () => end(false),
+      });
+    })(),
+  ).current;
   const heraclesRef = useRef({ x: 0, y: 0 });
   heraclesRef.current = { x: heracles.left + heracles.w * 0.8, y: HEIGHT - heracles.bottom - heracles.h * 0.55 };
   const monsterSizeRef = useRef(monsterSize);
@@ -181,7 +264,16 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
    * 몬스터 피격: 하얗게 번쩍 → (히트스톱 동안 멈칫) → 뒤로 날아갔다 튕겨 돌아온다.
    * 히트스톱: 강한 타격 순간 0.05~0.1초 멈추는 연출. 액션 게임 "손맛"의 핵심이다.
    */
-  const hitMonster = (power: number, hitStop = 0) => {
+  const hitMonsterAnim = (id: number | undefined, power: number, hitStop = 0) => {
+    // 필드 몬스터: 그 몬스터만 번쩍이고 밀려난다
+    const anim = !raid ? mobAnims.current.get(id ?? nearest?.id ?? -1) : undefined;
+    if (anim) {
+      anim.flash.setValue(1);
+      Animated.sequence([Animated.delay(hitStop), Animated.timing(anim.flash, { toValue: 0, duration: 150, useNativeDriver: ND })]).start();
+      anim.knock.setValue(power * 0.6);
+      Animated.sequence([Animated.delay(hitStop), Animated.spring(anim.knock, { toValue: 0, friction: 4, tension: 200, useNativeDriver: ND })]).start();
+      return;
+    }
     hitFlash.setValue(1);
     Animated.sequence([Animated.delay(hitStop), Animated.timing(hitFlash, { toValue: 0, duration: 150, useNativeDriver: ND })]).start();
     knock.setValue(hitStop > 0 ? power * 0.3 : power);
@@ -197,7 +289,7 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
   /** 신의 돌진: 앞으로 튀어나갔다 돌아온다. 지나간 자리에 잔상이 남는다 */
   const dashIt = (distance: number, ghostColor: string) => {
     for (let i = 1; i <= 3; i++) {
-      add({ kind: 'ghost', x: SIDE, bottom: GROUND, sprite: hero, scale: HERO_SCALE, color: ghostColor, dx: (distance * i) / 4 });
+      add({ kind: 'ghost', x: heroLeft, bottom: heroBottom, sprite: hero, scale: heroScale, color: ghostColor, dx: (distance * i) / 4 });
     }
     Animated.sequence([
       Animated.timing(dash, { toValue: distance, duration: 55, easing: Easing.out(Easing.quad), useNativeDriver: ND }),
@@ -207,7 +299,7 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
   };
 
   const damageText = (hit: Hit, size: number, color: string) => {
-    const p = pos.current;
+    const p = targetPos(hit.targetId);
     // 연타는 순서대로 좌우로 엇갈리며 위로 쌓이게 해서 숫자가 겹치지 않게 한다
     const i = hit.combo?.index ?? Math.floor(Math.random() * 3);
     add({
@@ -252,7 +344,7 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
       for (let i = 0; i < 5; i++) {
         later(i * 55, () => {
           add({ kind: 'thrust', fromX: p.heroX, toX: p.monX + 20, y: p.monY - 30 + i * 14, color: '#6FE3FF' });
-          hitMonster(6);
+          hitMonsterAnim(undefined, 6);
         });
       }
     } else if (id === 'poseidon_wave') {
@@ -310,7 +402,15 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
   // ───────────── 타격 연출 ─────────────
 
   const playHit = (hit: Hit, autoCount: number, skillInSameTick: boolean) => {
-    const p = pos.current;
+    const p = targetPos(hit.targetId); // 맞은 몬스터 위치에 연출을 그린다
+    const hitMonster = (power: number, hitStop = 0) => hitMonsterAnim(hit.targetId, power, hitStop);
+    // 광역 스킬의 두 번째 이후 대상: 큰 연출은 첫 대상에만, 나머지는 작은 폭발과 숫자만
+    if (hit.secondary) {
+      add({ kind: 'burst', x: p.monX, y: p.monY, color: skillColor(hit.source as SkillId), size: 80 });
+      hitMonster(10);
+      damageText(hit, 20, skillColor(hit.source as SkillId));
+      return;
+    }
     const combo = hit.combo;
     const last = combo ? combo.index === combo.total - 1 : true;
 
@@ -343,7 +443,7 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
         const i = combo?.index ?? 0;
         const angles = [-35, 35, 0];
         const C = '#7FE8FF';
-        dashIt(width * 0.34, C);
+        dashIt(Math.max(0, p.monX - p.heroX - 40), C);
         later(50, () => {
           add({ kind: 'crescent', x: p.monX, y: p.monY, angle: angles[i], radius: last ? 95 : 70, color: C, flip: i === 1 });
           if (last) add({ kind: 'crescent', x: p.monX, y: p.monY + 6, angle: 180, radius: 110, color: '#FFFFFF', flip: true });
@@ -432,7 +532,7 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
         // 회오리 검무: 돌진하며 검기를 빙글빙글 4번. 마지막은 큰 회오리 + 히트스톱
         const i = combo?.index ?? 0;
         const C = '#FFB347';
-        if (i === 0) dashIt(width * 0.3, C);
+        if (i === 0) dashIt(Math.max(0, p.monX - p.heroX - 40), C);
         add({ kind: 'crescent', x: p.monX, y: p.monY, angle: i * 90, radius: last ? 100 : 72, color: C, flip: i % 2 === 1 });
         add({ kind: 'crescent', x: p.monX, y: p.monY, angle: i * 90 + 180, radius: last ? 90 : 60, color: '#FFFFFF', flip: i % 2 === 0 });
         impact(p.monX, p.monY, C, last ? 1.5 : 0.8, last);
@@ -661,11 +761,29 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
       const skillInSameTick = r.hits.some((h) => h.source !== 'auto' && h.source !== 'tap');
       r.hits.forEach((h) => playHit(h, autoCount, skillInSameTick));
       if (r.killed) {
-        const p = pos.current;
+        const targets = r.killedIds.length ? r.killedIds.map((id) => targetPos(id)) : [pos.current];
         later(120, () => {
-          add({ kind: 'debris', x: p.monX, y: p.monY, color: '#FFFFFF', count: 10, power: 80 });
-          add({ kind: 'smoke', x: p.monX, y: p.monY + 10, count: 3 });
+          for (const p of targets) {
+            add({ kind: 'debris', x: p.monX, y: p.monY, color: '#FFFFFF', count: 8, power: 70 });
+            add({ kind: 'smoke', x: p.monX, y: p.monY + 10, count: 2 });
+          }
         });
+      }
+      // 몬스터에게 맞음: 신이 빨갛게 번쩍. 쓰러지면 배너
+      if (r.heroDamage > 0) {
+        heroHit.setValue(Math.min(1, 0.4 + r.heroDamage * 20));
+        Animated.timing(heroHit, { toValue: 0, duration: 220, useNativeDriver: ND }).start();
+        if (r.heroDamage > 0.03) shakeIt(4);
+      }
+      if (r.heroDown) {
+        tintIt('#300000', 0.6, 500);
+        add({ kind: 'banner', text: r.bossFailed ? '쓰러졌다... 한 스테이지 뒤로' : '쓰러졌다! 다시 도전', color: '#FF4D4D', big: false });
+      }
+      if (r.difficultyUnlocked !== null) {
+        const d = DIFFICULTIES[r.difficultyUnlocked];
+        add({ kind: 'banner', text: `「${d.name}」 난이도 개방!`, color: d.color, big: true });
+        add({ kind: 'rays', x: width / 2, y: 150, color: d.color, size: 420 });
+        flashIt(d.color, 0.7, 500, true);
       }
       for (const id of r.drops) {
         const w = WEAPONS[id];
@@ -688,9 +806,27 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
   // 기간토마키아는 핏빛 노을, 티포에우스는 용암이 끓는 화산
   const [skyTop, skyBottom] = raid ? (raid.id === 'gigantomachy' ? ['#2A0E14', '#7A2A1E'] : ['#12040A', '#4A0E08']) : skyColors(state);
   const phases = raid ? raidPhases(raid.id, state.god) : [];
+  const boss = raid ? null : state.monsters.find((m) => m.isBoss) ?? null;
+  const faceLeft = !!nearest && nearest.x < state.hero.x;
+  const mobView = (m: FieldMonster) => {
+    const sc = mobScale(m);
+    const size = spriteSize(m.kind, sc);
+    return (
+      <FieldMonsterView
+        key={m.id}
+        m={m}
+        left={toX(m.x) - size.w / 2}
+        bottom={toBottom(m.y)}
+        scale={sc}
+        faceRight={m.x < state.hero.x}
+        bob={bob}
+        register={(id, anim) => (anim ? mobAnims.current.set(id, anim) : (mobAnims.current.delete(id), mobPos.current.delete(id)))}
+      />
+    );
+  };
 
   return (
-    <Pressable onPressIn={onTap} onLayout={(e: LayoutChangeEvent) => setWidth(e.nativeEvent.layout.width)} style={styles.outer}>
+    <View {...pan.panHandlers} onLayout={(e: LayoutChangeEvent) => setWidth(e.nativeEvent.layout.width)} style={styles.outer}>
       <Animated.View
         style={[
           styles.container,
@@ -709,15 +845,22 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
           </View>
         )}
 
+        {/* 필드 몬스터 중 신보다 뒤(화면 위쪽)에 있는 것을 먼저 그린다 → 앞에 있는 것이 위에 겹친다 */}
+        {!raid &&
+          state.monsters
+            .filter((m) => m.y >= state.hero.y)
+            .sort((a, b) => b.y - a.y)
+            .map((m) => mobView(m))}
+
         {/* 신 */}
         <Animated.View
           style={{
             position: 'absolute',
-            left: SIDE,
-            bottom: GROUND + heroFloat,
+            left: 0,
+            bottom: 0,
             transform: [
-              { translateX: Animated.add(dash, recoil) },
-              { translateY: bob.interpolate({ inputRange: [0, 1], outputRange: [0, -6] }) },
+              { translateX: Animated.add(heroPosX, Animated.add(dash, recoil)) },
+              { translateY: Animated.add(heroPosY, bob.interpolate({ inputRange: [0, 1], outputRange: [0, -5] })) },
             ],
           }}
         >
@@ -748,22 +891,36 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
               </Svg>
             </Animated.View>
           )}
-          <HeroSprite name={hero} scale={heroScale} />
-          {raid && (
+          {/* 가까운 몬스터가 왼쪽에 있으면 그쪽을 본다 */}
+          <View style={{ transform: [{ scaleX: faceLeft ? -1 : 1 }] }}>
+            <HeroSprite name={hero} scale={heroScale} />
             <Animated.View style={[StyleSheet.absoluteFill, { opacity: heroHit }]} pointerEvents="none">
               <HeroSprite name={hero} scale={heroScale} tint="#FF3B3B" />
             </Animated.View>
-          )}
+          </View>
           {raid && raid.stunLeft > 0 && <Text style={styles.stun}>💫</Text>}
           {/* 레이드 중 신의 체력 (적이 공격하는 레이드에서만) */}
-          {raid && raid.attack > 0 && (
-            <View style={[styles.godHpTrack, { width: Math.min(heroSize.w, 110) }]} pointerEvents="none">
-              <View style={[styles.godHpFill, { width: `${Math.max(0, raid.godHp / raid.godMaxHp) * 100}%` }]} />
+          {(!raid || raid.attack > 0) && (
+            <View style={[styles.godHpTrack, { width: Math.min(heroSize.w, 90) }]} pointerEvents="none">
+              <View
+                style={[
+                  styles.godHpFill,
+                  { width: `${Math.max(0, raid ? raid.godHp / raid.godMaxHp : state.hero.hp) * 100}%` },
+                  !raid && state.hero.hp < 0.3 && { backgroundColor: colors.hp },
+                ]}
+              />
             </View>
           )}
         </Animated.View>
 
-        {/* 몬스터 */}
+        {!raid &&
+          state.monsters
+            .filter((m) => m.y < state.hero.y)
+            .sort((a, b) => b.y - a.y)
+            .map((m) => mobView(m))}
+
+        {/* 레이드 보스 (필드 몬스터는 위에서 그렸다) */}
+        {raid && (
         <Animated.View
           style={{
             position: 'absolute',
@@ -783,6 +940,7 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
             <PixelSprite name={monster.kind} scale={monsterScale} tint="#FFFFFF" />
           </Animated.View>
         </Animated.View>
+        )}
 
         {/* 궁극기 어둠 → 이펙트 → 번쩍임 순서로 겹친다 */}
         <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: tintColor, opacity: tint }]} />
@@ -798,7 +956,7 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
               ? RAIDS[raid.id].daily
                 ? `${RAIDS[raid.id].emoji} ${RAIDS[raid.id].name} · 처치 ${raid.kills}`
                 : `${RAIDS[raid.id].emoji} ${RAIDS[raid.id].name} ${raid.stage}단계 · ${raid.phase + 1}/${phases.length}`
-              : `스테이지 ${stageLabel(state.wave)}`}
+              : `${DIFFICULTIES[state.difficulty].name} · 스테이지 ${stageLabel(state.wave)}`}
           </Text>
           {raid && <Text style={[styles.buff, { color: raid.timeLeft < 15_000 ? colors.hp : colors.text }]}>⏱ {Math.ceil(raid.timeLeft / 1000)}초</Text>}
           {state.buff && (
@@ -826,15 +984,31 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
             <View style={[styles.bossTimerFill, { width: `${Math.min(1, state.bossTimeLeft / BOSS_TIME_LIMIT) * 100}%` }]} />
           </View>
         )}
+        {!raid && <Text style={styles.chapter} pointerEvents="none">{CHAPTERS[chapterOf(state.wave)].title}</Text>}
         <View style={styles.monsterInfo} pointerEvents="none">
-          <Text style={[styles.monsterName, monster.isBoss && { color: colors.boss }]}>{monster.name}</Text>
-          <View style={styles.hpTrack}>
-            <View style={[styles.hpFill, { width: `${Math.max(0, monster.hp / monster.maxHp) * 100}%` }]} />
-          </View>
-          <Text style={styles.hpText}>
-            {formatNumber(monster.hp)} / {formatNumber(monster.maxHp)}
-          </Text>
+          {raid || boss ? (
+            <>
+              <Text style={[styles.monsterName, (raid ? monster : boss!).isBoss && { color: colors.boss }]}>{(raid ? monster : boss!).name}</Text>
+              <View style={styles.hpTrack}>
+                <View style={[styles.hpFill, { width: `${Math.max(0, (raid ? monster : boss!).hp / (raid ? monster : boss!).maxHp) * 100}%` }]} />
+              </View>
+              <Text style={styles.hpText}>
+                {formatNumber((raid ? monster : boss!).hp)} / {formatNumber((raid ? monster : boss!).maxHp)}
+              </Text>
+            </>
+          ) : (
+            <Text style={styles.monsterName}>
+              {monster.name} 무리 · 남은 {state.monsters.length}
+            </Text>
+          )}
         </View>
+
+        {/* 조이스틱: 누른 자리에 나타난다 */}
+        {stick && (
+          <View pointerEvents="none" style={[styles.stickBase, { left: stick.ox - STICK_MAX, top: stick.oy - STICK_MAX }]}>
+            <View style={[styles.stickKnob, { transform: [{ translateX: stick.dx }, { translateY: stick.dy }] }]} />
+          </View>
+        )}
 
         {raid ? (
           <Pressable onPress={onLeaveRaid} style={[styles.challenge, { backgroundColor: 'rgba(0,0,0,0.55)' }]}>
@@ -846,13 +1020,76 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
           </Pressable>
         ) : (
           <Text style={styles.hint} pointerEvents="none">
-            화면을 터치하면 추가 공격!
+            끌어서 이동 · 멈추면 자동 공격 · 톡 치면 추가 공격
           </Text>
         )}
       </Animated.View>
-    </Pressable>
+    </View>
   );
 });
+
+/** 필드 몬스터 하나: 위치를 부드럽게 따라가고, 맞으면 번쩍이며 밀려난다. 머리 위에 작은 체력바 */
+function FieldMonsterView({
+  m,
+  left,
+  bottom,
+  scale,
+  faceRight,
+  bob,
+  register,
+}: {
+  m: FieldMonster;
+  left: number;
+  bottom: number;
+  scale: number;
+  faceRight: boolean;
+  bob: Animated.Value;
+  register: (id: number, anim: { flash: Animated.Value; knock: Animated.Value } | null) => void;
+}) {
+  const px = useRef(new Animated.Value(left)).current;
+  const py = useRef(new Animated.Value(-bottom)).current;
+  const flash = useRef(new Animated.Value(0)).current;
+  const knock = useRef(new Animated.Value(0)).current;
+  const spawn = useRef(new Animated.Value(0.3)).current;
+  useEffect(() => {
+    register(m.id, { flash, knock });
+    Animated.spring(spawn, { toValue: 1, friction: 5, tension: 140, useNativeDriver: ND }).start();
+    return () => register(m.id, null);
+  }, []);
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(px, { toValue: left, duration: 60, easing: Easing.linear, useNativeDriver: ND }),
+      Animated.timing(py, { toValue: -bottom, duration: 60, easing: Easing.linear, useNativeDriver: ND }),
+    ]).start();
+  }, [left, bottom]);
+  const size = spriteSize(m.kind, scale);
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={{
+        position: 'absolute',
+        left: 0,
+        bottom: 0,
+        transform: [
+          { translateX: Animated.add(px, faceRight ? Animated.multiply(knock, -1) : knock) },
+          { translateY: Animated.add(py, bob.interpolate({ inputRange: [0, 1], outputRange: [-2, 0] })) },
+          { scale: spawn },
+        ],
+      }}
+    >
+      <View style={[styles.mobHpTrack, { width: Math.min(size.w, 60), alignSelf: 'center' }]}>
+        <View style={[styles.mobHpFill, { width: `${Math.max(0, m.hp / m.maxHp) * 100}%` }, m.isBoss && { backgroundColor: colors.boss }]} />
+      </View>
+      {/* 스프라이트는 왼쪽(신 쪽)을 보고 있다. 신이 오른쪽에 있으면 뒤집는다 */}
+      <View style={{ transform: [{ scaleX: faceRight ? -1 : 1 }] }}>
+        <PixelSprite name={m.kind} scale={scale} />
+        <Animated.View style={[StyleSheet.absoluteFill, { opacity: flash }]}>
+          <PixelSprite name={m.kind} scale={scale} tint="#FFFFFF" />
+        </Animated.View>
+      </View>
+    </Animated.View>
+  );
+}
 
 /** 레이드 기믹 상태를 HUD 칩으로: [글자, 색] */
 function raidChips(r: NonNullable<GameState['raid']>): [string, string][] {
@@ -912,7 +1149,8 @@ function orbColor(s: GameState): string {
 }
 
 const styles = StyleSheet.create({
-  outer: { height: HEIGHT, borderRadius: 18, overflow: 'hidden', backgroundColor: '#000' },
+  // userSelect: 웹에서 끌 때 글자가 파랗게 선택되지 않게
+  outer: { height: HEIGHT, borderRadius: 18, overflow: 'hidden', backgroundColor: '#000', userSelect: 'none' } as object,
   container: { flex: 1 },
   skyTop: { position: 'absolute', top: 0, left: 0, right: 0, height: '55%' },
   ground: { position: 'absolute', left: 0, right: 0, bottom: 0, height: GROUND, backgroundColor: colors.ground },
@@ -927,6 +1165,21 @@ const styles = StyleSheet.create({
   hpTrack: { width: 140, height: 8, borderRadius: 4, backgroundColor: 'rgba(0,0,0,0.4)', marginTop: 4 },
   hpFill: { height: '100%', borderRadius: 4, backgroundColor: colors.hp },
   hpText: { color: colors.subText, fontSize: 11, marginTop: 2 },
+  chapter: { position: 'absolute', top: 36, left: 12, color: 'rgba(255,255,255,0.65)', fontSize: 11, fontWeight: '700' },
+  stickBase: {
+    position: 'absolute',
+    width: STICK_MAX * 2,
+    height: STICK_MAX * 2,
+    borderRadius: STICK_MAX,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.35)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stickKnob: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.55)' },
+  mobHpTrack: { height: 4, borderRadius: 2, backgroundColor: 'rgba(0,0,0,0.5)', marginBottom: 2, overflow: 'hidden' },
+  mobHpFill: { height: '100%', backgroundColor: colors.hp },
   hint: { position: 'absolute', bottom: 9, alignSelf: 'center', color: 'rgba(255,255,255,0.6)', fontSize: 12 },
   challenge: {
     position: 'absolute',
