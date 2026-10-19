@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import { View } from 'react-native';
+import { Animated, View } from 'react-native';
 
 import { PixelSprite, spriteSize } from './PixelSprite';
 
@@ -16,7 +16,7 @@ interface MountInfo {
 
 const MOUNTS: Record<string, MountInfo> = {
   zeus: { mount: 'cloud', overlap: 5, heroX: 5 },
-  poseidon: { mount: 'shark', overlap: 12, heroX: 4 },
+  poseidon: { mount: 'shark', overlap: 8, heroX: 4 },
 };
 
 /** 탈것을 타면 땅에서 이만큼(배율 1 기준 칸) 떠 있다 */
@@ -39,13 +39,24 @@ export function heroLayout(name: string, scale: number) {
   };
 }
 
-export const HeroSprite = memo(function HeroSprite({ name, scale, tint }: { name: string; scale: number; tint?: string }) {
+export const HeroSprite = memo(function HeroSprite({
+  name,
+  scale,
+  tint,
+  swing,
+}: {
+  name: string;
+  scale: number;
+  tint?: string;
+  /** 공격할 때 무기를 휘두르는 각도 */
+  swing?: Animated.AnimatedInterpolation<string>;
+}) {
   const layout = heroLayout(name, scale);
-  if (!layout.mount) return <PixelSprite name={name} scale={scale} tint={tint} />;
+  if (!layout.mount) return <PixelSprite name={name} scale={scale} tint={tint} swing={swing} />;
   return (
     <View style={{ width: layout.w, height: layout.h }}>
       <View style={{ position: 'absolute', left: layout.heroLeft, top: 0 }}>
-        <PixelSprite name={name} scale={scale} tint={tint} />
+        <PixelSprite name={name} scale={scale} tint={tint} swing={swing} />
       </View>
       <View style={{ position: 'absolute', left: 0, top: layout.mountTop }}>
         <PixelSprite name={layout.mount} scale={scale} tint={tint} />

@@ -86,6 +86,10 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
   const aura = useRef(new Animated.Value(0)).current;
   const heroHit = useRef(new Animated.Value(0)).current; // 신이 맞으면 빨갛게 번쩍
   const recoil = useRef(new Animated.Value(0)).current; // 신이 맞으면 뒤로 밀려남
+  // 무기 휘두르기: 0 가만히 → 1 뒤로 젖힘 → 2 앞으로 내리침 → 3 제자리 (끝나면 0으로)
+  const swing = useRef(new Animated.Value(0)).current;
+  const swingAngle = swing.interpolate({ inputRange: [0, 1, 2, 3], outputRange: ['0deg', '-35deg', '55deg', '0deg'] });
+  const swingBusy = useRef(false);
 
   const hero = heroSprite(state);
   const heroScale = state.god ? MOUNTED_SCALE : HERO_SCALE;
@@ -351,6 +355,7 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
   // ───────────── 스킬 시전 연출 (피해가 없는 부분: 배너, 분위기) ─────────────
 
   const playCast = (id: SkillId) => {
+    swingWeapon();
     const p = pos.current;
     const skill = SKILLS[id];
     const isUlt = id === 'zeus_judgment' || id === 'poseidon_kraken';
@@ -429,7 +434,23 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
   // ───────────── 타격 연출 ─────────────
 
   /** chainFrom: 자동 공격 범위 피해가 시작된 곳 (처음 맞은 몬스터 위치) */
+  /** 번개·삼지창을 휘두른다. 공격 속도가 빨라서 휘두르는 중이면 새로 시작하지 않는다 (모션이 끊겨 보이지 않게) */
+  const swingWeapon = () => {
+    if (swingBusy.current) return;
+    swingBusy.current = true;
+    swing.setValue(0);
+    Animated.sequence([
+      Animated.timing(swing, { toValue: 1, duration: 70, easing: Easing.out(Easing.quad), useNativeDriver: ND }),
+      Animated.timing(swing, { toValue: 2, duration: 80, easing: Easing.in(Easing.quad), useNativeDriver: ND }),
+      Animated.timing(swing, { toValue: 3, duration: 200, easing: Easing.out(Easing.back(2)), useNativeDriver: ND }),
+    ]).start(() => {
+      swing.setValue(0);
+      swingBusy.current = false;
+    });
+  };
+
   const playHit = (hit: Hit, skillInSameTick: boolean, chainFrom: { monX: number; monY: number } | null = null) => {
+    if (!hit.secondary) swingWeapon();
     const p = targetPos(hit.targetId); // 맞은 몬스터 위치에 연출을 그린다
     const hitMonster = (power: number, hitStop = 0) => hitMonsterAnim(hit.targetId, power, hitStop);
     // 광역 스킬의 두 번째 이후 대상: 큰 연출은 첫 대상에만, 나머지는 작은 폭발과 숫자만
@@ -986,9 +1007,9 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
           />
           {/* 가까운 몬스터가 왼쪽에 있으면 그쪽을 본다 */}
           <View style={{ transform: [{ scaleX: faceLeft ? -1 : 1 }] }}>
-            <HeroSprite name={hero} scale={heroScale} />
+            <HeroSprite name={hero} scale={heroScale} swing={swingAngle} />
             <Animated.View style={[StyleSheet.absoluteFill, { opacity: heroHit }]} pointerEvents="none">
-              <HeroSprite name={hero} scale={heroScale} tint="#FF3B3B" />
+              <HeroSprite name={hero} scale={heroScale} tint="#FF3B3B" swing={swingAngle} />
             </Animated.View>
           </View>
           {raid && raid.stunLeft > 0 && <Text style={styles.stun}>💫</Text>}

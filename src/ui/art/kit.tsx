@@ -29,6 +29,15 @@ export interface ArtDef {
   /** 그라데이션 정의 (실루엣 모드에서는 쓰지 않는다) */
   defs?: () => ReactNode;
   draw: (p: Paint) => ReactNode;
+  /**
+   * 따로 움직이는 무기 층 (번개, 삼지창). 몸 위에 겹쳐 그리고, 공격할 때 pivot(어깨)을 축으로 휘두른다.
+   * 무기를 쥔 팔·손도 이 층에 그려야 휘두를 때 팔이 함께 따라온다. 좌표계는 몸과 같다.
+   */
+  weapon?: {
+    draw: (p: Paint) => ReactNode;
+    /** 회전 축 (viewBox 단위, 보통 무기 든 팔의 어깨) */
+    pivot: [number, number];
+  };
 }
 
 export const LINE = '#1C1430';

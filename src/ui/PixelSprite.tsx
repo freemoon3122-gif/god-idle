@@ -1,4 +1,5 @@
 import { memo } from 'react';
+import { Animated, View } from 'react-native';
 import Svg, { Defs, Rect } from 'react-native-svg';
 
 import { VECTOR_ART } from './art';
@@ -11,6 +12,8 @@ interface Props {
   scale: number; // 픽셀 한 칸의 크기(pt)
   /** 지정하면 모든 픽셀(외곽선 포함)을 이 색 하나로 칠한다 (맞았을 때 하얗게 번쩍이는 실루엣, 잔상용) */
   tint?: string;
+  /** 무기 층의 회전 각도 (공격 모션). 없으면 가만히 */
+  swing?: Animated.AnimatedInterpolation<string>;
 }
 
 const OUTLINE_CHAR = '#';
@@ -23,16 +26,43 @@ const SEAM = 0.5; // 틈 메우기용 겹침
  * - 같은 색이 이어지는 칸은 하나의 사각형으로 합쳐서(Run-Length Encoding) 그릴 개수를 줄인다.
  * - memo: props가 같으면 다시 그리지 않는다. 게임은 0.05초마다 화면을 갱신하므로 중요하다.
  */
-export const PixelSprite = memo(function PixelSprite({ name, scale, tint }: Props) {
+export const PixelSprite = memo(function PixelSprite({ name, scale, tint, swing }: Props) {
   // 카툰 일러스트(벡터)가 있으면 그걸 그린다. 크기는 픽셀 그림과 같다 (좌표 = 칸 × 10)
   const art = VECTOR_ART[name];
   if (art) {
     const paint = makePaint(tint);
-    return (
-      <Svg width={art.w * scale} height={art.h * scale} viewBox={`0 0 ${art.w * 10} ${art.h * 10}`}>
-        {!tint && art.defs && <Defs>{art.defs()}</Defs>}
+    const W = art.w * scale;
+    const H = art.h * scale;
+    const viewBox = `0 0 ${art.w * 10} ${art.h * 10}`;
+    const defs = !tint && art.defs && <Defs>{art.defs()}</Defs>;
+    const body = (
+      <Svg width={W} height={H} viewBox={viewBox}>
+        {defs}
         {art.draw(paint)}
       </Svg>
+    );
+    if (!art.weapon) return body;
+    // 무기 층: 몸과 같은 크기의 SVG를 겹치고, 축(pivot)을 중심으로 돌린다.
+    // RN의 회전 중심은 View 가운데라서 "축을 가운데로 옮기기 → 돌리기 → 되돌리기" 순서로 변환한다
+    const dx = (art.weapon.pivot[0] / 10) * scale - W / 2;
+    const dy = (art.weapon.pivot[1] / 10) * scale - H / 2;
+    return (
+      <View style={{ width: W, height: H }}>
+        {body}
+        <Animated.View
+          style={{
+            position: 'absolute',
+            left: 0,
+            top: 0,
+            transform: swing ? [{ translateX: dx }, { translateY: dy }, { rotate: swing }, { translateX: -dx }, { translateY: -dy }] : [],
+          }}
+        >
+          <Svg width={W} height={H} viewBox={viewBox}>
+            {defs}
+            {art.weapon.draw(paint)}
+          </Svg>
+        </Animated.View>
+      </View>
     );
   }
   const rows = outlined(name);
