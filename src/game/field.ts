@@ -15,9 +15,12 @@ export const HERO_SPEED = 45; // 초당 필드 단위
 export const HERO_START = { x: 15, y: 0.5 };
 export const MONSTER_SPEED = 10;
 export const BOSS_SPEED = 7;
-/** 접촉 거리: 이 안에 들어오면 몬스터가 공격한다. y(깊이)는 0~1이라 x와 단위를 맞추려고 40을 곱해서 잰다 */
+/**
+ * 접촉 거리: 이 안에 들어오면 몬스터가 공격한다.
+ * y(깊이)는 0~1이라 x와 단위를 맞추려고 DEPTH_SCALE을 곱해서 잰다. 전체 화면에서는 필드가 화면 폭의 약 0.9배 높이라 90.
+ */
 export const CONTACT_RANGE = 9;
-export const DEPTH_SCALE = 40;
+export const DEPTH_SCALE = 90;
 export const MONSTER_ATTACK_INTERVAL = 1_000;
 /**
  * 몬스터 공격력 = 자기 최대 체력 × 이 값 → 체력이 제곱되는 높은 난이도에서는 공격력도 제곱된다.

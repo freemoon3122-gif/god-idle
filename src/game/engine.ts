@@ -81,6 +81,7 @@ import {
   BOSS_SPEED,
   clampHero,
   CONTACT_RANGE,
+  DEPTH_SCALE,
   distance,
   HERO_HP_PER_DPS,
   HERO_REGEN,
@@ -669,8 +670,8 @@ function moveHero(s: GameState, dt: number, move: MoveInput | null): GameState {
   const len = move ? Math.hypot(move.x, move.y) : 0;
   if (!move || len < 0.15) return s.hero.moving ? { ...s, hero: { ...s.hero, moving: false } } : s;
   const k = (HERO_SPEED * Math.min(1, len) * dt) / 1000 / len;
-  // 화면 위쪽 = 깊이 y가 커지는 방향. 깊이는 0~1이라 x와 같은 빠르기로 느껴지게 40으로 나눈다
-  const p = clampHero(s.hero.x + move.x * k, s.hero.y - (move.y * k) / 40);
+  // 화면 위쪽 = 깊이 y가 커지는 방향. 깊이는 0~1이라 x와 같은 빠르기로 느껴지게 DEPTH_SCALE로 나눈다
+  const p = clampHero(s.hero.x + move.x * k, s.hero.y - (move.y * k) / DEPTH_SCALE);
   return { ...s, hero: { ...s.hero, ...p, moving: true } };
 }
 
@@ -692,8 +693,8 @@ function fieldTick(s: GameState, dt: number, result: ActionResult, rng: Rng): Ga
     // 다가가기: 접촉 거리 바로 앞까지만 (겹치지 않게)
     const step = Math.min(d - CONTACT_RANGE * 0.9, ((m.isBoss ? BOSS_SPEED : MONSTER_SPEED) * dt) / 1000);
     const dx = (hero.x - m.x) / d;
-    const dy = ((hero.y - m.y) * 40) / d;
-    return { ...m, x: m.x + dx * step, y: Math.min(1, Math.max(0, m.y + (dy * step) / 40)) };
+    const dy = ((hero.y - m.y) * DEPTH_SCALE) / d;
+    return { ...m, x: m.x + dx * step, y: Math.min(1, Math.max(0, m.y + (dy * step) / DEPTH_SCALE)) };
   });
   const lost = Math.min(1, damage / maxHp);
   const hp = touching ? hero.hp - lost : Math.min(1, hero.hp + (HERO_REGEN * dt) / 1000);

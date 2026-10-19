@@ -17,14 +17,12 @@ import { heroSprite, skyColors } from './sprites';
 import { colors } from './theme';
 
 const ND = Platform.OS !== 'web';
-const HEIGHT = 360;
-const GROUND = 34; // 바닥 높이
-const DEPTH_PX = 74; // 필드 깊이(y 0~1)가 화면에서 차지하는 높이
 const SIDE = 20; // 좌우 여백
-const HERO_SCALE = 3; // 필드에 여러 마리가 나오므로 예전보다 작게
-const MOUNTED_SCALE = 2.6; // 탈것(구름·상어)을 타면 폭이 넓어지므로 조금 작게
-const MOB_WIDTH = 54; // 일반 몬스터 그림 폭(pt). 스프라이트 크기가 달라도 이 폭에 맞춘다
-const BOSS_WIDTH = 92;
+const HERO_SCALE = 3.6;
+const MOUNTED_SCALE = 3.1; // 탈것(구름·상어)을 타면 폭이 넓어지므로 조금 작게
+const MOB_WIDTH = 64; // 일반 몬스터 그림 폭(pt). 스프라이트 크기가 달라도 이 폭에 맞춘다
+const BOSS_WIDTH = 110;
+const FIELD_HUD = 120; // 필드 위쪽에 남겨 둘 공간 (스테이지·몬스터 정보 글자, 캐릭터 머리)
 const STICK_MAX = 46; // 조이스틱 손잡이가 움직이는 최대 거리(pt)
 const MAX_EFFECTS = 70;
 
@@ -41,7 +39,10 @@ interface Props {
   /** 조이스틱 입력 (손을 떼면 null → 멈춰서 자동 공격) */
   onMove: (move: MoveInput | null) => void;
   /** 끌고 있는 동안은 바깥 스크롤을 막는다 */
-  onDragging: (dragging: boolean) => void;
+  onDragging?: (dragging: boolean) => void;
+  /** 화면 위아래를 덮는 UI(상단 정보, 스킬 버튼·하단 탭)의 높이. 그만큼 피해서 필드를 그린다 */
+  topInset: number;
+  bottomInset: number;
 }
 
 /** 몬스터 그림 배율: 스프라이트 원래 크기가 제각각이라 정해진 폭에 맞춘다 */
@@ -57,8 +58,14 @@ function mobScale(m: { kind: string; isBoss: boolean }): number {
  *   - 스킬별 이펙트(참격, 번개, 해일, 촉수...)와 튀어오르는 데미지 숫자
  * forwardRef + useImperativeHandle: 부모가 battleRef.current.play(result)로 이 컴포넌트의 함수를 직접 부를 수 있게 한다.
  */
-export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ state, onTap, onChallengeBoss, onLeaveRaid, onMove, onDragging }, ref) {
-  const [width, setWidth] = useState(360);
+export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ state, onTap, onChallengeBoss, onLeaveRaid, onMove, onDragging, topInset, bottomInset }, ref) {
+  // 전체 화면: 실제 크기를 재서 쓴다 (폰마다 다르다)
+  const [size, setSize] = useState({ w: 390, h: 760 });
+  const width = size.w;
+  const HEIGHT = size.h;
+  const GROUND = bottomInset + 18; // 필드 맨 앞(y=0)이 서는 높이: 아래 UI 바로 위
+  // 필드 깊이(y 0~1)의 화면 높이: 필드 폭의 0.9배(엔진의 DEPTH_SCALE 90과 맞춤), 화면이 낮으면 들어가는 만큼
+  const DEPTH_PX = Math.max(80, Math.min((width - 2 * SIDE) * 0.9, HEIGHT - GROUND - topInset - FIELD_HUD - 60));
   const [effects, setEffects] = useState<Effect[]>([]);
   const nextId = useRef(0);
   const [flashColor, setFlashColor] = useState('#FFFFFF');
@@ -97,7 +104,7 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
   const monsterSize = spriteSize(monster.kind, monsterScale);
   // 기간토마키아: 헤라클레스가 뒤쪽 바위 언덕 위에서 활을 쏜다
   const heraclesScale = 2.5;
-  const heracles = { left: width * 0.44, bottom: GROUND + 122, ...spriteSize('heracles', heraclesScale) };
+  const heracles = { left: width * 0.44, bottom: GROUND + DEPTH_PX * 0.85, ...spriteSize('heracles', heraclesScale) };
 
   // 좌표 계산 (전투 영역 기준)
   const pos = useRef({ heroX: 0, heroY: 0, monX: 0, monY: 0, monTop: 0, groundY: 0 });
@@ -146,7 +153,7 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
       let startAt = 0;
       const end = (tap: boolean) => {
         cb.current.onMove(null);
-        cb.current.onDragging(false);
+        cb.current.onDragging?.(false);
         setStick(null);
         if (tap) cb.current.onTap(); // 끌지 않고 짧게 톡 치면 추가 공격
       };
@@ -156,7 +163,7 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
         onPanResponderTerminationRequest: () => false, // 끄는 도중에 스크롤이 손을 뺏어 가지 않게
         onPanResponderGrant: (e) => {
           startAt = Date.now();
-          cb.current.onDragging(true);
+          cb.current.onDragging?.(true);
           setStick({ ox: e.nativeEvent.locationX, oy: e.nativeEvent.locationY, dx: 0, dy: 0 });
         },
         onPanResponderMove: (_, g) => {
@@ -826,16 +833,21 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
   };
 
   return (
-    <View {...pan.panHandlers} onLayout={(e: LayoutChangeEvent) => setWidth(e.nativeEvent.layout.width)} style={styles.outer}>
+    <View
+      {...pan.panHandlers}
+      onLayout={(e: LayoutChangeEvent) => setSize({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })}
+      style={styles.outer}
+    >
       <Animated.View
         style={[
           styles.container,
           { backgroundColor: skyBottom, transform: [{ translateX: shake.x }, { translateY: shake.y }, { scale: zoom }] },
         ]}
       >
-        <View style={[styles.skyTop, { backgroundColor: skyTop }]} />
-        <View style={[styles.ground, raid && { backgroundColor: raid.id === 'typhoeus' ? '#3A1208' : '#3A2418' }]} />
-        {raid?.id === 'typhoeus' && <View style={styles.lava} />}
+        {/* 하늘(위) / 필드(가운데, 신과 몬스터가 다니는 곳) / 땅(아래 UI 뒤) */}
+        <View style={[styles.skyTop, { backgroundColor: skyTop, height: Math.max(0, HEIGHT - GROUND - DEPTH_PX - 70) }]} />
+        <View style={[styles.ground, { height: bottomInset }, raid && { backgroundColor: raid.id === 'typhoeus' ? '#3A1208' : '#3A2418' }]} />
+        {raid?.id === 'typhoeus' && <View style={[styles.lava, { bottom: bottomInset }]} />}
 
         {/* 헤라클레스: 바위 언덕 위에서 활을 겨눈다 */}
         {raid?.id === 'gigantomachy' && (
@@ -950,6 +962,7 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
         <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: flashColor, opacity: flash }]} />
 
         {/* HUD: 스테이지, 보스 타이머, 몬스터 체력 */}
+        <View style={{ height: topInset }} pointerEvents="none" />
         <View style={styles.topRow} pointerEvents="none">
           <Text style={styles.stage}>
             {raid
@@ -984,7 +997,7 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
             <View style={[styles.bossTimerFill, { width: `${Math.min(1, state.bossTimeLeft / BOSS_TIME_LIMIT) * 100}%` }]} />
           </View>
         )}
-        {!raid && <Text style={styles.chapter} pointerEvents="none">{CHAPTERS[chapterOf(state.wave)].title}</Text>}
+        {!raid && <Text style={[styles.chapter, { top: topInset + 36 }]} pointerEvents="none">{CHAPTERS[chapterOf(state.wave)].title}</Text>}
         <View style={styles.monsterInfo} pointerEvents="none">
           {raid || boss ? (
             <>
@@ -1011,15 +1024,15 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
         )}
 
         {raid ? (
-          <Pressable onPress={onLeaveRaid} style={[styles.challenge, { backgroundColor: 'rgba(0,0,0,0.55)' }]}>
+          <Pressable onPress={onLeaveRaid} style={[styles.challenge, { bottom: bottomInset + 4, backgroundColor: 'rgba(0,0,0,0.55)' }]}>
             <Text style={styles.challengeText}>🏳️ 포기하고 나가기</Text>
           </Pressable>
         ) : state.farming ? (
-          <Pressable onPress={onChallengeBoss} style={styles.challenge}>
+          <Pressable onPress={onChallengeBoss} style={[styles.challenge, { bottom: bottomInset + 4 }]}>
             <Text style={styles.challengeText}>👑 보스 재도전</Text>
           </Pressable>
         ) : (
-          <Text style={styles.hint} pointerEvents="none">
+          <Text style={[styles.hint, { bottom: bottomInset + 6 }]} pointerEvents="none">
             끌어서 이동 · 멈추면 자동 공격 · 톡 치면 추가 공격
           </Text>
         )}
@@ -1150,10 +1163,10 @@ function orbColor(s: GameState): string {
 
 const styles = StyleSheet.create({
   // userSelect: 웹에서 끌 때 글자가 파랗게 선택되지 않게
-  outer: { height: HEIGHT, borderRadius: 18, overflow: 'hidden', backgroundColor: '#000', userSelect: 'none' } as object,
+  outer: { flex: 1, overflow: 'hidden', backgroundColor: '#000', userSelect: 'none' } as object,
   container: { flex: 1 },
-  skyTop: { position: 'absolute', top: 0, left: 0, right: 0, height: '55%' },
-  ground: { position: 'absolute', left: 0, right: 0, bottom: 0, height: GROUND, backgroundColor: colors.ground },
+  skyTop: { position: 'absolute', top: 0, left: 0, right: 0 },
+  ground: { position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: colors.ground },
   aura: { position: 'absolute' },
   topRow: { flexDirection: 'row', justifyContent: 'space-between', padding: 12 },
   stage: { color: colors.text, fontWeight: '800', fontSize: 15 },
@@ -1191,7 +1204,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
   },
   challengeText: { color: '#fff', fontWeight: '800' },
-  lava: { position: 'absolute', left: 0, right: 0, bottom: GROUND - 6, height: 6, backgroundColor: '#FF7A1F', opacity: 0.8 },
+  lava: { position: 'absolute', left: 0, right: 0, height: 6, backgroundColor: '#FF7A1F', opacity: 0.8 },
   ledge: { width: 70, height: 14, marginLeft: -10, marginTop: -4, borderRadius: 8, backgroundColor: '#5A3A2A', borderWidth: 2, borderColor: '#1C1430' },
   godHpTrack: { position: 'absolute', bottom: -12, left: 4, height: 6, borderRadius: 3, backgroundColor: 'rgba(0,0,0,0.5)', overflow: 'hidden' },
   godHpFill: { height: '100%', backgroundColor: colors.xp },
