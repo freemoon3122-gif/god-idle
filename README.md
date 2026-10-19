@@ -116,9 +116,10 @@ src/
     format.ts           #   큰 숫자 표시 (1.23K, 4.5M, 7.8aa ...)
   storage/save.ts       # 기기 저장 (AsyncStorage)
   ui/
-    sprites.ts          #   픽셀 아트 데이터 ← 그림 수정은 여기
+    art/                #   ⭐ 카툰 일러스트(벡터 SVG): heroes·monsters·raid.tsx ← 그림 수정은 여기
+    sprites.ts          #   예전 픽셀 아트 (art/에 없는 이름만 이걸로 그린다)
     effects.tsx         #   전투 이펙트 (참격, 번개, 해일, 촉수, 파편, 데미지 숫자...)
-    PixelSprite.tsx     #   픽셀 아트 렌더러
+    PixelSprite.tsx     #   그림 렌더러 (벡터 그림이 있으면 벡터, 없으면 픽셀)
     BattleView.tsx      #   전투 화면
     Panels.tsx          #   상단 정보, 스킬 버튼, 강화 목록
     Modals.tsx          #   오프라인 보상, 진화, 신 선택 팝업
