@@ -159,7 +159,7 @@ export function migrate(saved: GameState): GameState {
   // 버전 1 저장: 레벨을 10배로 바꾼다. 이미 신이었다면 최소 Lv.3000 (신이 되는 레벨)
   if ((saved.version ?? 1) < 2) {
     const level = Math.max(saved.level * LEVEL_SCALE, saved.god ? GOD_LEVEL : 1);
-    saved = { ...saved, version: SAVE_VERSION, level, xp: 0 };
+    saved = { ...saved, version: 2, level, xp: 0 }; // 다음 단계(v2 → v3) 변환도 이어서 받도록 한 단계씩만 올린다
   }
   // 버전 2 저장: 예전 웨이브 W → 스테이지 (W−1)×5+1 (같은 강함), 필드 전투 상태를 새로 만든다
   if (saved.version < 3) {
