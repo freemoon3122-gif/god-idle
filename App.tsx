@@ -1,6 +1,6 @@
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, AppState, ScrollView, ScrollViewInstance, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, AppState, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
 import {
@@ -73,7 +73,7 @@ export default function App() {
   const [offline, setOffline] = useState<OfflineReward | null>(null);
   const [evolved, setEvolved] = useState<'teen' | 'adult' | null>(null); // 진화 팝업에 보여 줄 단계
   const [buyAmount, setBuyAmount] = useState(1); // 강화 한 번에 몇 단계씩 살지 (×1/×10/×50/×100)
-  const scrollRef = useRef<ScrollViewInstance>(null);
+  const scrollRef = useRef<ScrollView>(null);
   // 레이드 컷신: 보여 줄 대사 목록과 지금 몇 번째 줄인지. 컷신이 떠 있는 동안 게임 시간은 멈춘다.
   const [story, setStory] = useState<{ lines: StoryLine[]; index: number } | null>(null);
   const storyRef = useRef(false);

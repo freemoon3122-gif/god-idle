@@ -117,6 +117,9 @@ scripts/raid-sim.ts     # 레이드 클리어 시뮬레이터
 
 ## 실행
 
+> **Expo SDK 57** (React Native 0.86)을 씁니다. App Store의 Expo Go가 지원하는 버전에 맞춘 것입니다.
+> 폰에서 "requires a newer version of Expo Go"가 뜨면 Expo Go를 업데이트하세요.
+
 ```bash
 npm install
 npm start               # QR 코드 → 아이폰 Expo Go 앱으로 실행
