@@ -63,6 +63,23 @@ export function SkillDock({ state, onCast }: { state: GameState; onCast: (id: Sk
   );
 }
 
+// ───────────── 🤖 자동 이동 켜기/끄기 (스킬 버튼 줄 오른쪽 위) ─────────────
+
+export function AutoMoveButton({ on, onPress }: { on: boolean; onPress: () => void }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="switch"
+      accessibilityState={{ checked: on }}
+      accessibilityLabel="자동 이동"
+      style={({ pressed }) => [styles.auto, on && styles.autoOn, pressed && { transform: [{ scale: 0.92 }] }]}
+    >
+      <Text style={styles.autoEmoji}>🤖</Text>
+      <Text style={[styles.autoText, on && { color: colors.gold }]}>{on ? '자동 ON' : '자동 OFF'}</Text>
+    </Pressable>
+  );
+}
+
 // ───────────── 하단 탭 ─────────────
 
 export function TabBar({ active, onPress, bottomPad }: { active: TabId | null; onPress: (id: TabId) => void; bottomPad: number }) {
@@ -142,6 +159,23 @@ const styles = StyleSheet.create({
   cdText: { position: 'absolute', color: '#fff', fontWeight: '900', fontSize: 16 },
   skillLv: { position: 'absolute', top: 1, right: 6, color: colors.gold, fontSize: 10, fontWeight: '900' },
 
+  auto: {
+    position: 'absolute',
+    right: 10,
+    top: -48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: 'rgba(14, 10, 30, 0.75)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.25)',
+  },
+  autoOn: { borderColor: colors.gold, backgroundColor: 'rgba(60, 44, 10, 0.85)' },
+  autoEmoji: { fontSize: 16 },
+  autoText: { color: colors.subText, fontWeight: '900', fontSize: 12 },
   tabBar: { flexDirection: 'row', backgroundColor: 'rgba(14, 10, 30, 0.96)', borderTopWidth: 1, borderTopColor: colors.border },
   tab: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 6 },
   tabActive: { backgroundColor: 'rgba(255, 213, 74, 0.08)' },

@@ -136,3 +136,51 @@ const EDGE = 14;
 export function clampHero(x: number, y: number): { x: number; y: number } {
   return { x: Math.min(FIELD_W - EDGE, Math.max(EDGE, x)), y: Math.min(1, Math.max(0, y)) };
 }
+
+// ───────────── 자동 이동 (조이스틱을 안 잡고 있을 때) ─────────────
+/** 몬스터가 이 거리 안으로 들어오면 피하기 시작한다 */
+const KITE_START = CONTACT_RANGE + 4;
+/** 피할 때 이만큼 떨어지면 멈춰서 다시 공격한다 */
+const KITE_SAFE = 26;
+/** 체력이 이보다 낮으면 물러나서 회복하고, RETREAT_END까지 차면 다시 싸운다 */
+const RETREAT_START = 0.35;
+const RETREAT_END = 0.8;
+const RETREAT_SAFE = 50;
+const DIRECTIONS = 16;
+const PROBE = 12; // 방향을 고를 때 이만큼 가 봤다고 치고 잰다
+
+/**
+ * 자동 이동 판단. 자동 공격은 사거리가 무제한이라 다가갈 필요는 없고, "맞지 않기"만 신경 쓴다.
+ *   - 몬스터가 붙으려 하면 살짝 피했다가 멈춰서 공격 (카이팅)
+ *   - 체력이 낮으면 멀리 물러나 회복 (붙은 몬스터가 없어야 회복된다), 다 차면 다시 싸운다
+ * 피하는 방향: 16방향을 다 가 보고(시뮬레이션) "가장 가까운 몬스터와의 거리"가 제일 먼 곳을 고른다.
+ * 맵 끝은 clampHero로 막히니까 자연스럽게 벽을 따라 돈다. (게임 AI의 아주 단순한 탐색 = 탐욕 알고리즘)
+ */
+export function autoMove(hero: Hero, monsters: FieldMonster[]): { move: { x: number; y: number } | null; retreat: boolean } {
+  let retreat = hero.retreat ?? false;
+  if (hero.hp < RETREAT_START) retreat = true;
+  else if (retreat && hero.hp >= RETREAT_END) retreat = false;
+  if (!monsters.length) return { move: null, retreat };
+
+  const nearestFrom = (x: number, y: number) => Math.min(...monsters.map((m) => distance(x, y, m.x, m.y)));
+  const d = nearestFrom(hero.x, hero.y);
+  const safe = retreat ? RETREAT_SAFE : KITE_SAFE;
+  // 멈춰 있으면 KITE_START 안으로 들어올 때 출발, 이미 피하는 중이면 safe만큼 벌어질 때까지 계속 (왔다 갔다 떨지 않게)
+  const go = retreat ? d < safe : hero.moving ? d < safe : d < KITE_START;
+  if (!go) return { move: null, retreat };
+
+  let best = -Infinity;
+  let bestA = 0;
+  for (let i = 0; i < DIRECTIONS; i++) {
+    const a = (i / DIRECTIONS) * Math.PI * 2;
+    const p = clampHero(hero.x + Math.cos(a) * PROBE, hero.y + (Math.sin(a) * PROBE) / DEPTH_SCALE);
+    // 맵 가운데 쪽을 조금 더 좋아한다 (구석에 몰리면 도망칠 곳이 없다)
+    const score = nearestFrom(p.x, p.y) - Math.abs(p.x - FIELD_W / 2) * 0.05 - Math.abs(p.y - 0.5) * 8;
+    if (score > best) {
+      best = score;
+      bestA = a;
+    }
+  }
+  // 조이스틱 입력과 같은 형식: y는 화면 위쪽(-)이 깊이 +
+  return { move: { x: Math.cos(bestA), y: -Math.sin(bestA) }, retreat };
+}

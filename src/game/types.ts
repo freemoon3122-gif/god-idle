@@ -57,6 +57,7 @@ export interface Hero {
   y: number;
   hp: number;
   moving: boolean; // 움직이는 중이면 자동 공격을 하지 않는다
+  retreat?: boolean; // 자동 이동: 체력이 낮아 물러나 회복하는 중
 }
 
 /** 이동 입력 (조이스틱 방향, 길이 0~1) */
@@ -166,6 +167,7 @@ export interface GameState {
   skillLevels: Partial<Record<SkillId, number>>; // 스킬 강화 레벨 (없으면 0)
   bossPassive: number; // 패시브 '거인 사냥꾼' 레벨
   awaken: number; // 패시브 '신의 각성' 총 강화 횟수 (4단계 × 5번씩 순환)
+  autoMove: boolean; // 🤖 자동 이동 켜짐 (몬스터가 붙으면 피하고, 체력이 낮으면 물러나 회복)
   totalKills: number;
   savedAt: number; // 마지막 저장 시각 (Date.now()). 오프라인 보상 계산용
 }

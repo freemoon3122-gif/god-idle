@@ -43,6 +43,7 @@ import {
   tap,
   tick,
   awaken,
+  toggleAutoMove,
   upgradeBossPassive,
   upgradeSkill,
 } from './src/game/engine';
@@ -52,7 +53,7 @@ import { BattleHandle, BattleView } from './src/ui/BattleView';
 import { DevPanel } from './src/ui/DevPanel';
 import { EvolveModal, GodChoiceModal, OfflineModal } from './src/ui/Modals';
 import { DifficultyChip, DifficultyPicker, StatusBar as GameStatusBar, UpgradeList, WeaponPanel } from './src/ui/Panels';
-import { Sheet, SKILL_DOCK_H, SkillDock, TAB_BAR_H, TabBar, TabId, TABS } from './src/ui/Hud';
+import { AutoMoveButton, Sheet, SKILL_DOCK_H, SkillDock, TAB_BAR_H, TabBar, TabId, TABS } from './src/ui/Hud';
 import { heroSprite } from './src/ui/sprites';
 import { DailyPanel, RaidPanel, RaidResultModal, StoryModal } from './src/ui/RaidUI';
 import { GachaResultModal, PassivePanel, ShopPanel, SkillUpgradePanel } from './src/ui/ShopUI';
@@ -289,6 +290,7 @@ function Game() {
       {/* 아래: 스킬 버튼 → 탭. 탭을 누르면 창이 올라온다 (같은 탭을 다시 누르면 닫힘) */}
       <View style={styles.bottom} pointerEvents="box-none">
         <SkillDock state={game} onCast={(id: SkillId) => gameRef.current && apply(castSkill(gameRef.current, id))} />
+        {!game.raid && <AutoMoveButton on={game.autoMove} onPress={() => act(toggleAutoMove)} />}
         <TabBar active={tab} onPress={(id) => setTab((cur) => (cur === id ? null : id))} bottomPad={insets.bottom} />
       </View>
       <Sheet

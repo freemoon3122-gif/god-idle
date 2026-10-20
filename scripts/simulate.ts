@@ -30,7 +30,7 @@ const god = (process.argv[2] as GodId) || 'zeus';
 const DT = 100; // 0.1초 단위로 진행 (실제 앱과 동일)
 const CHECKPOINTS_MIN = [1, 5, 10, 20, 30, 45, 60, 120, 240, 480, 960];
 
-let s: GameState = newGame(0);
+let s: GameState = { ...newGame(0), autoMove: process.env.AUTO === '1' }; // AUTO=1이면 자동 이동을 켜고 돌린다
 let farmingSince = 0;
 let elapsed = 0;
 const milestones: string[] = [];

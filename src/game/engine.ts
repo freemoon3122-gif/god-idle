@@ -84,6 +84,7 @@ import {
   skillUpgradeCost,
 } from './economy';
 import {
+  autoMove,
   BOSS_SPEED,
   clampHero,
   CONTACT_RANGE,
@@ -155,6 +156,7 @@ export function newGame(now: number): GameState {
     coins: 0,
     skillLevels: {},
     bossPassive: 0,
+    autoMove: false,
     awaken: 0,
     totalKills: 0,
     savedAt: now,
@@ -210,6 +212,7 @@ export function migrate(saved: GameState): GameState {
     coins: saved.coins ?? 0,
     skillLevels: saved.skillLevels ?? {},
     bossPassive: saved.bossPassive ?? 0,
+    autoMove: saved.autoMove ?? false,
     awaken: saved.awaken ?? 0,
   };
 }
@@ -337,6 +340,12 @@ export function tick(state: GameState, dt: number, rng: Rng = Math.random, move:
   }
 
   // 1) 이동: 조이스틱 방향으로 움직인다. 움직이는 동안은 공격하지 않는다
+  //    조이스틱을 안 잡고 있고 자동 이동이 켜져 있으면, 몬스터를 피하는 방향을 스스로 고른다
+  if (!move && s.autoMove && !s.raid) {
+    const auto = autoMove(s.hero, s.monsters);
+    move = auto.move;
+    if (auto.retreat !== (s.hero.retreat ?? false)) s = { ...s, hero: { ...s.hero, retreat: auto.retreat } };
+  }
   s = moveHero(s, dt, move);
 
   // 2) 몬스터: 신에게 다가와 붙으면 공격 (레이드 중에는 필드가 멈춰 있다)
@@ -1200,4 +1209,9 @@ export function devUnlockRaids(state: GameState): GameState {
     level: Math.max(state.level, TYPHON_UNLOCK_LEVEL),
     raidTickets: { day: '', used: {} },
   };
+}
+
+/** 🤖 자동 이동 켜기/끄기 */
+export function toggleAutoMove(state: GameState): GameState {
+  return { ...state, autoMove: !state.autoMove, hero: { ...state.hero, retreat: false } };
 }
