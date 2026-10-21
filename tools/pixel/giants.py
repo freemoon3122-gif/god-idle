@@ -85,8 +85,11 @@ def subpaths(d):
             i += 2
             cmd = 'L'
         elif cmd == 'L':
+            # 직선도 잘게 쪼갠다 (관을 그릴 때 끝점에만 원이 찍히지 않도록)
             x, y = nums(2)
-            cur.append((x, y))
+            x0, y0 = cur[-1]
+            n = max(1, int(math.dist((x0, y0), (x, y)) / 2))
+            cur += [(x0 + (x - x0) * k / n, y0 + (y - y0) * k / n) for k in range(1, n + 1)]
             i += 2
         elif cmd == 'C':
             a = nums(6)
@@ -221,9 +224,14 @@ class Canvas:
         for (x, y) in m:
             self.put(x, y, c)
 
-    def line(self, d, c, w=4):
-        """가는 선(근육 결·주름) — 명암 없이 한 색"""
-        self.paint(tmask(d, w), c)
+    def line(self, d, c, w=None):
+        """1픽셀 선(근육 결·주름·골) — 곡선을 따라 계단 모양 그대로 찍는다 (w는 예전 호출 호환용)"""
+        for sp in subpaths(d):
+            pts = [(int(x * K), int(y * K)) for x, y in sp]
+            for (x0, y0), (x1, y1) in zip(pts, pts[1:]):
+                self.s.line(x0, y0, x1, y1, c)
+            if len(pts) == 1:
+                self.put(*pts[0], c)
 
 
 def _run(m, x, y, dx, dy):

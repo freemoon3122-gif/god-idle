@@ -535,7 +535,7 @@ def coral(rng, kind):
                 branch(x, y, ang + rng.uniform(0.45, 0.8), n - 2)
                 branch(x, y, ang - rng.uniform(0.45, 0.8), n - 2)
 
-        branch(8.5, 16, math.pi / 2, 6)
+        branch(8.5, 16, math.pi / 2, 7)
         return a
     a = Sprite(15, 11)
     cols = rng.choice((['#5C4060', '#7A5A80', '#9A7AA0'], ['#6A5530', '#8E7442', '#B39556']))
