@@ -409,17 +409,20 @@ def make_zeus():
         if abs(y - (oy + TS * 7)) < 22:
             y += 30
         pts.append((x, y))
-        a = Sprite(16, 12)
-        # 쓰러진 기둥 토막: 옆면(세로 홈) + 둥근 끝면
-        a.rect(4, 2, 11, 8, drum[1])
-        for i in range(4, 15, 3):
-            a.hline(i, 3, 1, drum[2])
-            a.vline(i, 3, 6, drum[2])
-        a.hline(4, 2, 11, drum[3])
-        a.hline(4, 9, 11, drum[0])
-        a.ellipse(3.5, 5.5, 3, 4, drum[2])
-        a.ellipse(3.5, 5.5, 1.5, 2, drum[3])
-        shadow_ellipse(s, x + 9, y + 11, 8, 2)
+        a = Sprite(16, 16)
+        # 부러진 기둥 밑동을 위에서 본 모양: 네모 받침돌 + 둥근 단면(가장자리 홈) + 금 간 윗면
+        a.rect(0, 1, 16, 15, drum[0])
+        a.hline(0, 1, 16, drum[1])
+        a.vline(0, 1, 15, drum[1])
+        a.ellipse(7.5, 7.5, 6.5, 6.5, drum[1])
+        a.ellipse(7.5, 7.5, 5.5, 5.5, drum[2])
+        a.ellipse(6.5, 6.5, 3, 3, drum[3])
+        for k in range(12):  # 세로 홈 끝이 단면 둘레에 점으로
+            ang = k / 12 * math.pi * 2
+            a.px(round(8 + math.cos(ang) * 6), round(8 + math.sin(ang) * 6), drum[0])
+        a.line(5, 9, 9, 12, '#3A3654')
+        a.line(9, 12, 11, 11, '#3A3654')
+        shadow_ellipse(s, x + 10, y + 15, 8, 2.5)
         stamp(s, a, x, y, ZOUT)
     for x, y in scatter(rng, 14, 4, W - 6, TOP + 14, H - 24, 16, pts):
         for _ in range(rng.randint(2, 4)):
