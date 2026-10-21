@@ -193,20 +193,21 @@ def prune(m):
 # ───────────── 캔버스 ─────────────
 
 class Canvas:
-    def __init__(self, w, h):
+    def __init__(self, w, h, oy=0):
         self.w, self.h = w, h
+        self.oy = oy  # 그림 전체를 아래로 내리는 픽셀 수 (SVG 원본이 캔버스 맨 위에 붙어 있을 때)
         self.s = Sprite(w, h)
 
     def put(self, x, y, c):
-        self.s.px(int(x), int(y), c)
+        self.s.px(int(x), int(y) + self.oy, c)
 
     def filled(self, x, y):
-        return self.s.get(x, y)[3] > 0
+        return self.s.get(x, y + self.oy)[3] > 0
 
     def fill(self, m, ramp, edge=OUTLINE, shade=True, along=None, band=None, period=3.0, hl=True):
         """마스크를 4단계 명암으로 칠한다. edge: 이미 칠한 부분과 맞닿은 둘레에 두를 선 색 (None이면 없음)
         band: 관(tube)을 따라 일정 간격(period 픽셀)마다 다른 색 띠 (뱀 비늘 무늬)"""
-        m = {p for p in m if 0 <= p[0] < self.w and 0 <= p[1] < self.h}
+        m = {p for p in m if 0 <= p[0] < self.w and 0 <= p[1] + self.oy < self.h}
         if edge:
             # 뒤에 있는 부품과의 경계선. 빈 곳(그림 바깥)은 마지막 외곽선이 맡는다
             for (x, y) in m:
@@ -229,7 +230,7 @@ class Canvas:
         for sp in subpaths(d):
             pts = [(int(x * K), int(y * K)) for x, y in sp]
             for (x0, y0), (x1, y1) in zip(pts, pts[1:]):
-                self.s.line(x0, y0, x1, y1, c)
+                self.s.line(x0, y0 + self.oy, x1, y1 + self.oy, c)
             if len(pts) == 1:
                 self.put(*pts[0], c)
 
@@ -264,37 +265,74 @@ def tone(m, x, y, ramp):
 def finish(c):
     """마지막 외곽선 + 확대 저장용 Sprite 반환"""
     c.s.outline(OUTLINE)
+    # 발(외곽선)이 캔버스 맨 아래 줄에 닿도록 남는 아래 여백만큼 내린다
+    box = c.s.img.getbbox()
+    gap = c.h - box[3]
+    if gap > 0 and box[1] >= gap:
+        moved = Image.new('RGBA', (c.w, c.h), (0, 0, 0, 0))
+        moved.alpha_composite(c.s.img, (0, gap))
+        c.s.img = moved
+        c.s.p = moved.load()
     return c.s
 
 
 # ───────────── 공용 부품 ─────────────
 
-SERP_UP = 'M-16 4 C-18 -16 4 -26 24 -20 C38 -16 50 -8 56 0 C44 4 24 6 8 8 C-2 10 -10 10 -16 4 Z'
-SERP_LO = 'M-12 6 C4 12 22 12 44 18 C40 26 16 28 -6 20 Z'
-SERP_MOUTH = 'M10 6 L50 2 L42 18 C30 16 18 12 10 6 Z'
-SERP_HORN = 'M-8 -12 L-30 -26 L-14 -6 Z M2 -16 L-12 -36 L12 -18 Z'
+# 뱀 머리는 몇 픽셀 안 돼서 도형을 돌려 찍으면 뭉개진다 → 손으로 찍은 작은 도트를 붙인다.
+# 글자: h 밝은 비늘, b 비늘, s 그림자, d 진한 그림자, e 눈, E 빛나는 눈 중심, w 이빨, m 입속, t 혀, n/N 뿔
+SERP_SMALL = [  # 8×7, 오른쪽 위를 보고 입을 벌림 (뱀 다리 끝)
+    '..hhh...',
+    '.hbbbhh.',
+    'hbbEebbh',
+    'bbbbbbsw',
+    'sbbsmmm.',
+    '.sdddwd.',
+    '..dd....',
+]
+SERP_BIG = [  # 13×12, 왼쪽을 보고 크게 벌린 입 + 뒤로 젖힌 뿔 (티포에우스 목 끝)
+    '..........NN.',
+    '.........nNN.',
+    '......hhnnN..',
+    '...hhhbsssbsd',
+    '..hbbbbEebbsd',
+    '.hbbbbbeebssd',
+    'hbbbbbbbbbssd',
+    'wbwbwbsssssd.',
+    'mmmmmmmmssd..',
+    'tmmmmmmmdsd..',
+    '.twmwmddddd..',
+    '..dddddd.....',
+]
 
 
-def serpent(c, x, y, s, rot, flip, skin, eye='#FF2E2E', horns=False, mouth=True):
-    """뱀 머리 (raid.tsx SerpentHead와 같은 모양). 작아서 눈은 1~2픽셀, 송곳니 1픽셀"""
-    T = lambda d: tf(d, x, y, s, rot, flip)  # noqa: E731
-    if horns:
-        c.fill(shape(T(SERP_HORN)), BONE)
-    lo = shape(T(SERP_LO))
-    c.fill(lo, [skin[2], skin[2], skin[3], skin[3]])
-    if mouth:
-        c.paint(shape(T(SERP_MOUTH)) - lo, MOUTH)
-    up = shape(T(SERP_UP))
-    c.fill(up, skin)
-    # 송곳니: 윗턱 아래 가장자리 바로 밑 한 픽셀
-    fx, fy = _pt(T('M38 8 L38 8'))
-    if not (int(fx), int(fy)) in up:
-        c.put(fx, fy, TEETH)
-    # 빛나는 눈: 눈 자리 픽셀 + 밝은 중심
-    ex, ey = _pt(T('M14 -8 L14 -8'))
-    c.put(ex, ey, eye)
-    c.put(ex + (-1 if flip else 1), ey, eye)
-    c.put(ex, ey - 1, '#FFF6D0') if s > 0.9 else None
+def stamp(c, rows, pal, x, y, flip=False, edge=OUTLINE):
+    """손으로 찍은 도트를 (x, y)에 붙인다. flip이면 좌우 반전. 뒤에 있는 그림과의 경계엔 외곽선"""
+    w = len(rows[0])
+    pix = {}
+    for j, line in enumerate(rows):
+        for i, ch in enumerate(line):
+            if ch in pal:
+                pix[(x + (w - 1 - i if flip else i), y + j)] = pal[ch]
+    if edge:
+        for (px, py) in pix:
+            for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                q = (px + dx, py + dy)
+                if q not in pix and c.filled(*q):
+                    c.put(q[0], q[1], edge)
+    for (px, py), col in pix.items():
+        c.put(px, py, col)
+
+
+def serp_pal(skin, eye='#FF2E2E', core='#FFF6D0'):
+    return {'h': skin[0], 'b': skin[1], 's': skin[2], 'd': skin[3], 'e': eye, 'E': core,
+            'w': TEETH, 'm': MOUTH, 't': '#E5484D', 'n': BONE[1], 'N': BONE[3]}
+
+
+def leg_heads(c, lx, rx, y, skin, eye='#FF2E2E'):
+    """뱀 다리 끝 머리 두 개: 왼쪽 것은 오른쪽 위를, 오른쪽 것은 왼쪽 위를 본다 (x는 머리 가운데 픽셀)"""
+    pal = serp_pal(skin, eye)
+    stamp(c, SERP_SMALL, pal, int(lx) - 4, int(y) - 4)
+    stamp(c, SERP_SMALL, pal, int(rx) - 3, int(y) - 4, flip=True)
 
 
 def _pt(d):
@@ -320,8 +358,7 @@ def snake_legs(c, base_y=0, sx=0, scale=1.0):
     for d in ('M96 182 C60 188 18 200 20 232 C22 258 46 264 62 252', 'M104 182 C140 188 182 200 180 232 C178 258 154 264 138 252'):
         m, al = tube(T(d), 26 * scale)
         c.fill(m, SNAKE, along=al, band=SNAKE_BAND, period=2.5)
-    serpent(c, sx + 60 * scale, base_y + 250 * scale, 0.74 * scale, -50, False, SNAKE_HEAD)
-    serpent(c, sx + 140 * scale, base_y + 250 * scale, 0.74 * scale, 50, True, SNAKE_HEAD)
+    leg_heads(c, (sx + 62 * scale) * K, (sx + 138 * scale) * K, (base_y + 250 * scale) * K, SNAKE_HEAD)
     c.fill(shape(T('M50 180 C50 166 150 166 150 180 C150 196 128 200 100 200 C72 200 50 196 50 180 Z')), HIP)
 
 
@@ -345,6 +382,8 @@ def gigas_head(c, hair, oy=0):
     T = lambda d: tf(d, 0, oy)  # noqa: E731
     Y = oy * K
     c.fill(shape(T('M100 6 C120 4 140 8 152 18 C168 16 182 30 176 46 C188 56 184 74 170 82 C168 66 160 56 150 52 L50 52 C40 56 32 66 30 82 C16 74 12 56 24 46 C18 30 32 16 48 18 C60 8 80 4 100 6 Z')), hair)
+    # 갈기 끝 삐침 (헬멧처럼 매끈해 보이지 않게 위·옆으로 뻗친 머리털)
+    c.fill(shape(T('M60 16 L50 4 L76 10 Z M94 8 L106 0 L116 8 Z M136 12 L156 4 L150 22 Z M26 40 L10 34 L24 54 Z M174 40 L190 34 L178 56 Z')), hair)
     c.fill(shape(T('M54 62 L26 46 L32 74 C36 84 48 86 54 82 Z')), SKIN)
     c.fill(shape(T('M148 64 L170 52 L166 74 C162 82 152 84 148 80 Z')), SKIN)
     face = shape(T('M50 46 C50 22 74 14 100 14 C126 14 150 22 150 46 L152 78 C152 100 130 112 100 112 C70 112 48 100 48 78 Z'))
@@ -387,7 +426,7 @@ def gigas_head(c, hair, oy=0):
 # ───────────── 기간테스 창병 (48×56) ─────────────
 
 def giant_spear():
-    c = Canvas(48, 56)
+    c = Canvas(48, 56, oy=1)
     hair = ['#9A6438', '#6E4626', '#4A2C14', '#24140A']
     # 창 (몸 뒤)
     c.fill(shape('M212 54 L222 54 L222 272 L212 272 Z'), WOOD)
@@ -455,8 +494,7 @@ def polybotes():
     for d in ('M120 228 C82 236 46 248 46 276 C46 300 72 306 88 294', mx('M120 228 C82 236 46 248 46 276 C46 300 72 306 88 294', 145)):
         m, al = tube(d, 28)
         c.fill(m, sea, along=al, band=sea_band, period=2.5)
-    serpent(c, 86, 292, 0.8, -50, False, ['#8EC0EA', '#4F86B8', '#2E5E92', '#1B3C85'], eye='#6FE3FF')
-    serpent(c, 204, 292, 0.8, 50, True, ['#8EC0EA', '#4F86B8', '#2E5E92', '#1B3C85'], eye='#6FE3FF')
+    leg_heads(c, 88 * K, 202 * K, 292 * K, ['#8EC0EA', '#4F86B8', '#2E5E92', '#1B3C85'], eye='#6FE3FF')
     c.fill(shape('M80 224 C80 208 210 208 210 224 C210 242 180 248 145 248 C110 248 80 242 80 224 Z'), sea)
     c.fill(tmask('M58 158 C46 172 46 182 52 194', 26), skin)
     c.fill(tmask('M232 158 C246 176 250 192 248 208', 26), skin)
@@ -554,8 +592,7 @@ def porphyrion():
     for d in ('M126 246 C84 252 38 266 38 298 C38 324 66 332 84 316', mx('M126 246 C84 252 38 266 38 298 C38 324 66 332 84 316', 150)):
         m, al = tube(d, 32)
         c.fill(m, SNAKE, along=al, band=SNAKE_BAND, period=3)
-    serpent(c, 82, 314, 0.92, -50, False, SNAKE_HEAD)
-    serpent(c, 218, 314, 0.92, 50, True, SNAKE_HEAD)
+    leg_heads(c, 84 * K, 216 * K, 314 * K, SNAKE_HEAD)
     c.fill(shape('M84 246 C84 230 216 230 216 246 C216 264 186 270 150 270 C114 270 84 264 84 246 Z'), HIP)
     # 팔
     c.fill(tmask('M50 170 C40 190 36 204 38 222', 30), skin)
@@ -613,9 +650,9 @@ def porphyrion():
         c.put(i, 21, TEETH)
     c.fill(shape('M114 104 C128 92 142 96 150 101 C158 96 172 92 186 104 C176 110 162 108 150 105 C138 108 124 110 114 104 Z'), hair)
     # 왕관
-    crown = 'M102 58 L97 16 L116 34 L127 8 L139 32 L150 2 L161 32 L173 8 L184 34 L203 16 L198 58 Z'
+    crown = 'M102 58 L97 16 L116 34 L127 8 L139 32 L150 7 L161 32 L173 8 L184 34 L203 16 L198 58 Z'
     c.fill(shape(crown), GOLD)
-    for x, y in ((98, 18), (127, 10), (150, 5), (173, 10), (202, 18)):
+    for x, y in ((98, 18), (127, 10), (150, 9), (173, 10), (202, 18)):
         c.fill(ell(x, y, 5, 5), ['#FFFFFF', '#FFF27A', '#F2C23A', '#C9971C'], edge=None)
     c.fill(shape('M100 42 C130 38 170 38 200 42 L200 58 C170 54 130 54 100 58 Z'), ['#F2C23A', '#C9971C', '#9A6E10', '#6A4A08'])
     c.fill(ell(150, 49, 8, 7), RED)
@@ -641,23 +678,33 @@ def typhoeus():
     m, al = tube('M386 264 C376 256 368 248 356 238', 30, 10)
     c.fill(m, scale_r)
     c.fill(shape('M372 254 C362 238 350 226 334 216 C358 214 380 224 392 244 Z'), band)
-    # 뱀 목·머리 여섯 (뒤 → 앞 순서로, 바깥쪽 목부터)
-    necks = [
-        ('M178 180 C162 152 146 126 146 100 C146 88 142 78 136 70', 22, 136, 70, 72, 0.92),
-        ('M160 190 C130 172 98 156 100 120 C101 104 98 94 90 84', 24, 90, 84, 52, 1.05),
-        ('M150 200 C110 204 54 204 56 172 C58 152 70 142 62 130', 26, 62, 130, 34, 1.1),
+    # 뱀 목·머리 여섯: 뒤(위쪽) 목은 어둡게, 앞 목은 밝게 해서 서로 겹쳐도 구분되게.
+    # 목 끝(tip)에 손으로 찍은 큰 뱀 머리를 붙인다. 왼쪽 셋은 왼쪽을, 오른쪽 셋은 오른쪽을 본다
+    back = ['#C85A66', '#8E2E3C', '#64202C', '#3A0C18']
+    back_band = ['#A84452', '#72222E', '#521824', '#2E0812']
+    necks = [  # (경로, 굵기, 비늘색, 띠색, 머리색)
+        ('M178 180 C160 150 140 120 132 92 C128 72 124 58 118 46', 22, back, back_band,
+         ['#E06A76', '#B03E4A', '#7E2634', '#4A1220']),
+        ('M160 190 C120 172 80 160 76 126 C74 110 70 100 66 92', 24, scale_r, band, snake),
+        ('M150 200 C100 204 44 200 44 176 C44 166 48 160 52 156', 26, scale_r, band, snake),
     ]
-    for d, w, x, y, rot, s in necks:
+    for d, w, r, bd, hd in necks:
         for side in 'LR':
             dd = d if side == 'L' else mx(d, 225)
             mm, al = tube(dd, w)
-            c.fill(mm, scale_r, along=al, band=band, period=3)
-            serpent(c, x if side == 'L' else 450 - x, y, s, rot if side == 'L' else -rot, side == 'L', snake, eye='#FFC23A', horns=True)
+            c.fill(mm, r, along=al, band=bd, period=3)
+            tx, ty = _pt(mx(d, 225)[::-1] and ('M' + d.split()[-2] + ' ' + d.split()[-1]))
+            pal = serp_pal(hd, eye='#FFB030', core='#FFFBD0')
+            if side == 'L':
+                stamp(c, SERP_BIG, pal, int(tx) - 9, int(ty) - 7)
+            else:
+                stamp(c, SERP_BIG, pal, int(90 - tx) - 3, int(ty) - 7, flip=True)
     # 몸통 + 팔
     c.fill(shape('M118 186 C160 166 290 166 332 186 C352 196 356 222 342 238 C332 252 318 262 302 272 L148 272 C132 262 118 252 108 238 C94 222 98 196 118 186 Z'), scale_r)
-    arm = 'M132 200 C100 204 74 218 68 246'
-    c.fill(tmask(arm, 34), scale_r)
-    c.fill(tmask(mx(arm, 225), 34), scale_r)
+    # 팔: 어깨는 굵고 손목으로 갈수록 가늘게 (근육질 팔뚝)
+    arm = 'M136 196 C104 200 80 214 68 244'
+    c.fill(tmask(arm, 38, 26), scale_r)
+    c.fill(tmask(mx(arm, 225), 38, 26), scale_r)
     # 황금 배비늘
     c.fill(shape('M182 182 L268 182 C276 212 272 246 262 274 L188 274 C178 246 174 212 182 182 Z'), gold)
     c.line('M182 206 C205 214 245 214 268 206 M182 230 C205 238 245 238 268 230 M186 254 C206 262 244 262 264 254', gold[3], 4)
