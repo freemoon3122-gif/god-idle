@@ -1,8 +1,9 @@
 import { memo } from 'react';
-import { Animated, View } from 'react-native';
+import { Animated, Image, View } from 'react-native';
 import Svg, { Defs, Rect } from 'react-native-svg';
 
 import { VECTOR_ART } from './art';
+import { IMAGE_ART } from './art/images';
 import { makePaint } from './art/kit';
 
 import { OUTLINE, PALETTE, SPRITES } from './sprites';
@@ -29,6 +30,33 @@ const SEAM = 0.5; // 틈 메우기용 겹침
 export const PixelSprite = memo(function PixelSprite({ name, scale, tint, swing }: Props) {
   // 카툰 일러스트(벡터)가 있으면 그걸 그린다. 크기는 픽셀 그림과 같다 (좌표 = 칸 × 10)
   const art = VECTOR_ART[name];
+  // PNG 그림이 등록돼 있으면 PNG로 (크기·무기 축은 같은 이름의 벡터 그림 것을 그대로 쓴다)
+  const image = IMAGE_ART[name];
+  if (art && image) {
+    const W = art.w * scale;
+    const H = art.h * scale;
+    // tintColor: 투명하지 않은 부분을 한 색으로 칠한다 → 맞았을 때 번쩍이는 실루엣
+    const style = { width: W, height: H, ...(tint && { tintColor: tint }) };
+    const body = <Image source={image.body} style={style} resizeMode="contain" />;
+    if (!image.weapon || !art.weapon) return body;
+    const dx = (art.weapon.pivot[0] / 10) * scale - W / 2;
+    const dy = (art.weapon.pivot[1] / 10) * scale - H / 2;
+    return (
+      <View style={{ width: W, height: H }}>
+        {body}
+        <Animated.View
+          style={{
+            position: 'absolute',
+            left: 0,
+            top: 0,
+            transform: swing ? [{ translateX: dx }, { translateY: dy }, { rotate: swing }, { translateX: -dx }, { translateY: -dy }] : [],
+          }}
+        >
+          <Image source={image.weapon} style={style} resizeMode="contain" />
+        </Animated.View>
+      </View>
+    );
+  }
   if (art) {
     const paint = makePaint(tint);
     const W = art.w * scale;

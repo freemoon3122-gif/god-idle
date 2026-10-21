@@ -1,5 +1,8 @@
 import { memo } from 'react';
+import { Image } from 'react-native';
 import Svg, { Circle, Defs, Ellipse, G, Line, LinearGradient, Path, Polygon, RadialGradient, Rect, Stop } from 'react-native-svg';
+
+import { BACKGROUND_IMAGES } from './art/images';
 
 /**
  * 맵 배경 (카툰 일러스트). 맵 전체 크기(화면보다 넓다)로 한 번 그려 두고, 카메라가 움직이면 통째로 밀어서 보여 준다.
@@ -36,6 +39,9 @@ const range = (n: number) => Array.from({ length: Math.max(0, n) }, (_, i) => i)
 export const FieldBackground = memo(function FieldBackground({ theme, w, h }: { theme: BgTheme; w: number; h: number }) {
   // 전체 높이 = 원경(위) + 바닥(아래, 신과 몬스터가 다니는 곳)
   const H = BACKDROP_H + h;
+  // PNG 배경이 등록돼 있으면 그걸 맵 크기에 맞춰 깐다 (cover: 비율이 조금 달라도 빈틈 없이 채우고 넘치는 부분은 잘린다)
+  const image = BACKGROUND_IMAGES[theme];
+  if (image) return <Image source={image} style={{ width: w, height: H }} resizeMode="cover" />;
   return (
     <Svg width={w} height={H}>
       {theme === 'zeus' ? <Olympus w={w} h={h} /> : theme === 'poseidon' ? <Undersea w={w} h={h} /> : <Meadow w={w} h={h} />}
