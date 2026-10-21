@@ -334,11 +334,11 @@ def zeus_body():
     a.dot(24, 37, WHITE)
 
     # 반대쪽 팔: 허리에 주먹, 금 팔찌, 금 어깨장식
-    arm = capsule(15, 31, 12, 36, 2.1) | capsule(12, 36, 14, 38, 1.9)
-    a.fill(arm, 'skin', sphere(cx=13, cy=32, rx=5, ry=7))
-    a.fill(rect(11, 34, 4, 2), 'gold', flat(1))
-    a.dot(11, 34, '#FFF7B0')
-    a.fill(ell(14.5, 39, 2.4, 2.2), 'skin', sphere(th=(0.7, 0.2, -0.4)))
+    arm = capsule(15, 31, 12, 36, 2.1)
+    a.fill(arm, 'skin', sphere(cx=13, cy=31, rx=5, ry=7))
+    a.fill(rect(10, 33, 5, 2), 'gold', lambda m: (lambda x, y: 0 if (x, y) == (10, 33) else (1 if y == 33 else 2)), edge=False)
+    a.fill(ell(13.5, 37.5, 2.6, 2.3), 'skin', sphere(cx=12.5, cy=36.5, rx=3.5, ry=3.5, th=(0.6, 0.15, -0.4)), edge=3)
+    a.dots(14, 37, ['k', 'k'], {'k': '#C07060'})
     a.fill(ell(16, 30, 3.5, 2.6), 'gold', sphere(th=(0.6, 0.15, -0.4)))
     a.dot(15, 29, WHITE)
 
@@ -455,13 +455,14 @@ def brown_hair(a, cx, cy, rx, ry, bang_y, sides, spikes, mat='brown'):
 def baby():
     a = Art(48, 48)
     # 날개 (몸 뒤, 양쪽): 깃털 3겹
-    wing = puffs([(11, 30, 6, 4), (7, 33, 4.5, 3), (10, 36, 4.5, 2.6)]) | poly([(12, 27), (18, 29), (18, 38), (12, 38)])
-    wing = {p for p in wing if p[0] >= 2}
+    wing = poly([(17, 30), (14, 26), (10, 23.5), (6, 23), (4, 25), (6, 26.5), (3.5, 28), (6, 30), (4.5, 32),
+                 (8, 33.5), (7, 35), (11, 35.5), (15, 34.5), (17, 33)])
     for m in (wing, mirror(wing, 24)):
-        a.fill(m, 'white', sphere(cx=9, cy=28, rx=10, ry=10, th=(0.6, 0.15, -0.35)), edge=3)
-    for m in (capsule(5, 33, 13, 32, 0.4) | capsule(6, 36.5, 13, 35, 0.4),):
-        a.shade(m, 1)
-        a.shade(mirror(m, 24), 1)
+        a.fill(m, 'white', sphere(cx=10, cy=24, rx=10, ry=10, th=(0.6, 0.15, -0.35)), edge=3)
+    # 깃털 겹 (아래 깃털 경계를 한 단계 어둡게)
+    feather = capsule(6.5, 26.5, 14, 27.5, 0.4) | capsule(6.5, 30, 14, 30.5, 0.4) | capsule(8.5, 33.5, 14, 33.5, 0.4)
+    a.shade(feather, 1)
+    a.shade(mirror(feather, 24), 1)
     # 다리 + 금 샌들
     for lx in (20, 25):
         a.fill(rect(lx, 39, 3, 4), 'skin', flat(1))
@@ -637,9 +638,9 @@ def poseidon_body():
     a.fill(cape, 'teal', sphere(cx=14, cy=32, rx=14, ry=18, th=(0.7, 0.25, -0.3)))
     a.shade(capsule(12, 37, 9, 46, 0.5) | capsule(16, 37, 14, 46, 0.5), 1)
     # 뒷머리: 흰 머리, 끝은 청록으로 물들어 뒤로 흩날림
-    a.fill(ell(25, 17, 14, 13), 'hair', flat(3))
-    a.puffs([(10, 29, 3.4), (7, 23, 3.6), (8, 16, 4), (11, 10, 4.2), (17, 5.5, 4.6), (25, 4.5, 5),
-             (33, 5.5, 4.6), (39, 10, 4.2), (41.5, 17, 3.8), (41, 24, 3.2)], 'hair', center=(25, 15), size=(16, 14), mass=0.45)
+    a.fill(ell(25, 18, 14, 12), 'hair', flat(3))
+    a.puffs([(10, 29, 3.4), (7, 23, 3.6), (8, 16, 4), (11, 10.5, 4), (17, 8, 4.2), (25, 7.5, 4.4),
+             (33, 8, 4.2), (39, 10.5, 4), (41.5, 17, 3.8), (41, 24, 3.2)], 'hair', center=(25, 15), size=(16, 14), mass=0.45)
     # 청록 머리끝 컬
     a.fill(puffs([(6, 32, 3, 2.4), (4, 27.5, 2.4, 2.6)]), 'teal', sphere(cx=5, cy=28, rx=5, ry=6, th=(0.6, 0.15, -0.35)), edge=2)
     a.fill(puffs([(42.5, 28, 2.2, 2.4)]), 'teal', sphere(th=(0.6, 0.15, -0.35)), edge=2)
@@ -798,8 +799,8 @@ def shark():
     a.erase(mouth)
     a.fill(mouth, 'mouth', vband(21, 26, (2, 3, 3)), edge=False)
     teeth = {'w': WHITE, 's': '#C8D2E4'}
-    a.dots(72, 21, ['.w.w.w.w.w.w..', '.s.s.s.w.w.w.w', '........s.s.s.'], teeth)
-    a.dots(75, 24, ['..w...w..w.', '.wsw.wsw.w.'], teeth)
+    a.dots(73, 21, ['......wwwwwww', 'wwwwwwwwwsw.w', 'w.sw.sw.w..'.ljust(13, '.')], teeth)
+    a.dots(75, 24, ['..w..w..w.', '.wsw.wswws'], teeth)
     # 눈 + 매서운 눈썹
     a.dots(74, 14, ['kkk..', '.kkkk', '.wwk.', '.wkk.', '..kk.'], {'k': INK, 'w': WHITE})
     a.dot(76, 16, WHITE)
