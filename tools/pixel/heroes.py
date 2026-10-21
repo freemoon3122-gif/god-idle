@@ -579,7 +579,7 @@ def adult():
         a.shade({(x, y) for y in range(39, 43)}, 2, only=('leather',))
     # 가슴갑옷 (근육 모양)
     chest = poly([(17, 27), (27, 24), (37, 27), (38, 37), (16, 37)])
-    a.fill(chest, 'bronze', sphere(cx=24, cy=26, rx=14, ry=13, th=(0.75, 0.25, -0.25)))
+    a.fill(chest, 'bronze', sphere(cx=24, cy=26, rx=14, ry=13, th=(0.62, 0.12, -0.45)))
     a.shade(capsule(20, 30, 26, 31, 0.4) | capsule(28, 31, 34, 30, 0.4) | capsule(27, 32, 27, 35, 0.4), 1)
     a.shade({(21, 29), (22, 29)}, -1)
     a.fill(rect(16, 36, 23, 2), 'gold', vband(36, 38, (1, 2)), edge=False)

@@ -21,11 +21,43 @@ export interface ImageArt {
   weapon?: ImageSourcePropType;
 }
 
-export const IMAGE_ART: Record<string, ImageArt> = {};
+export const IMAGE_ART: Record<string, ImageArt> = {
+  // 도트 그림 (tools/pixel/*.py로 만든다. 다시 만들려면: python3 tools/pixel/heroes.py 등)
+  baby: { body: require('../../../assets/sprites/baby.png') },
+  teen: { body: require('../../../assets/sprites/teen.png') },
+  adult: { body: require('../../../assets/sprites/adult.png') },
+  cloud: { body: require('../../../assets/sprites/cloud.png') },
+  shark: { body: require('../../../assets/sprites/shark.png') },
+  slime: { body: require('../../../assets/sprites/slime.png') },
+  bat: { body: require('../../../assets/sprites/bat.png') },
+  skeleton: { body: require('../../../assets/sprites/skeleton.png') },
+  ghost: { body: require('../../../assets/sprites/ghost.png') },
+  cyclops: { body: require('../../../assets/sprites/cyclops.png') },
+  heracles: { body: require('../../../assets/sprites/heracles.png') },
+  gaia: { body: require('../../../assets/sprites/gaia.png') },
+  hermes: { body: require('../../../assets/sprites/hermes.png') },
+  giant_spear: { body: require('../../../assets/sprites/giant_spear.png') },
+  giant_rock: { body: require('../../../assets/sprites/giant_rock.png') },
+  polybotes: { body: require('../../../assets/sprites/polybotes.png') },
+  porphyrion: { body: require('../../../assets/sprites/porphyrion.png') },
+  typhoeus: { body: require('../../../assets/sprites/typhoeus.png') },
+  zeus: {
+    body: require('../../../assets/sprites/zeus.png'),
+    weapon: require('../../../assets/sprites/zeus_weapon.png'),
+  },
+  poseidon: {
+    body: require('../../../assets/sprites/poseidon.png'),
+    weapon: require('../../../assets/sprites/poseidon_weapon.png'),
+  },
+};
 
 /**
  * 배경 PNG (맵 전체 한 장). 등록하지 않은 테마는 지금처럼 SVG 배경으로 그린다.
  * 맵은 화면보다 넓어서(가로 2.4화면) 카메라가 따라가며 일부만 보인다. 크기는 assets/sprites/README.md 참고.
  * 예) zeus: require('../../../assets/sprites/bg_zeus.png'),
  */
-export const BACKGROUND_IMAGES: Partial<Record<'zeus' | 'poseidon' | 'earth', ImageSourcePropType>> = {};
+export const BACKGROUND_IMAGES: Partial<Record<'zeus' | 'poseidon' | 'earth', ImageSourcePropType>> = {
+  earth: require('../../../assets/sprites/bg_earth.png'),
+  zeus: require('../../../assets/sprites/bg_zeus.png'),
+  poseidon: require('../../../assets/sprites/bg_poseidon.png'),
+};
