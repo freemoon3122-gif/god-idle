@@ -7,20 +7,22 @@ export type UpgradeId = 'damage' | 'speed' | 'crit' | 'critDmg' | 'gold';
 export type GodId = 'zeus' | 'poseidon';
 
 export type SkillId =
-  | 'teen_slash' // 청소년 신 (Lv.1000~)
-  | 'adult_whirl' // 성인 신 (Lv.2000~)
-  | 'zeus_bolt'
-  | 'zeus_storm'
-  | 'zeus_chain' // Lv.4000
-  | 'zeus_eagle' // Lv.6000
-  | 'zeus_king' // Lv.8000
-  | 'zeus_judgment' // 제우스 궁극기 (Lv.10000)
-  | 'poseidon_wave'
-  | 'poseidon_trident'
-  | 'poseidon_maelstrom' // Lv.4000
-  | 'poseidon_quake' // Lv.6000
-  | 'poseidon_blessing' // Lv.8000
-  | 'poseidon_kraken' // 포세이돈 궁극기 (Lv.10000)
+  // 단계마다 3개씩. 한 번 열린 스킬은 단계가 올라가도 계속 쓴다 (신이 되면 3 × 4 = 12개)
+  | 'baby_star' // 아기 신 Lv.1
+  | 'baby_halo' // 아기 신 Lv.300
+  | 'baby_feather' // 아기 신 Lv.600
+  | 'teen_slash' // 청소년 신 Lv.1000
+  | 'teen_dash' // 청소년 신 Lv.1300
+  | 'teen_laurel' // 청소년 신 Lv.1600
+  | 'adult_whirl' // 성인 신 Lv.2000
+  | 'adult_shield' // 성인 신 Lv.2400
+  | 'adult_meteor' // 성인 신 궁극기 Lv.2800
+  | 'zeus_bolt' // 제우스 Lv.3000
+  | 'zeus_storm' // 제우스 Lv.3400
+  | 'zeus_judgment' // 제우스 궁극기 Lv.3800
+  | 'poseidon_wave' // 포세이돈 Lv.3000
+  | 'poseidon_trident' // 포세이돈 Lv.3400
+  | 'poseidon_kraken' // 포세이돈 궁극기 Lv.3800
   | 'zeus_gigas' // 레이드 「기간토마키아」 첫 클리어 보상 (제우스)
   | 'poseidon_nisyros'; // 레이드 「기간토마키아」 첫 클리어 보상 (포세이돈)
 

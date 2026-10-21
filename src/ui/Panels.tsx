@@ -1,9 +1,9 @@
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { ADULT_LEVEL, formOf, GOD_LEVEL, GODS, SKILLS, TEEN_LEVEL, ULTIMATE_LEVEL, UPGRADES, upgradeCost, xpToNext, DIFFICULTIES, STAGES_PER_DIFFICULTY } from '../game/balance';
-import { availableSkills, bulkPlan, canCast, canEnhance, canFuse, formName, ownedPower, skillCooldown, skillLevel } from '../game/engine';
+import { UPGRADES, upgradeCost, xpToNext, DIFFICULTIES, STAGES_PER_DIFFICULTY } from '../game/balance';
+import { bulkPlan, canEnhance, canFuse, formName, ownedPower } from '../game/engine';
 import { formatNumber } from '../game/format';
-import { GameState, SkillId, UpgradeId } from '../game/types';
+import { GameState, UpgradeId } from '../game/types';
 import { FUSE_COST, RARITY_INFO, WEAPON_LIST, WeaponId, WEAPONS } from '../game/weapons';
 import { colors } from './theme';
 
@@ -91,73 +91,6 @@ export function DifficultyPicker({
         </View>
       </Pressable>
     </Modal>
-  );
-}
-
-/** 스킬 버튼. 아기 신은 스킬이 없고, 청소년 1개, 성인 2개, 신은 최대 5개 + 궁극기 */
-export function SkillBar({ state, onCast }: { state: GameState; onCast: (id: SkillId) => void }) {
-  const skills = availableSkills(state);
-  const form = formOf(state.level);
-  // 다음에 열릴 스킬 안내
-  const nextGodSkill = state.god ? GODS[state.god].extraSkills.find(([, lv]) => state.level < lv) : undefined;
-  const nextHint =
-    form === 'baby'
-      ? `🔒 Lv.${TEEN_LEVEL} 청소년 신이 되면 「삼연참」이 열려요`
-      : form === 'teen'
-        ? `🔒 Lv.${ADULT_LEVEL} 성인 신이 되면 「${SKILLS.adult_whirl.name}」이 열려요`
-        : form === 'adult'
-          ? `🔒 Lv.${GOD_LEVEL}에 진짜 신이 되면 신의 스킬이 열려요`
-          : nextGodSkill
-            ? `🔒 Lv.${nextGodSkill[1]}에 「${SKILLS[nextGodSkill[0]].emoji} ${SKILLS[nextGodSkill[0]].name}」이 열려요`
-            : state.god && state.level < ULTIMATE_LEVEL
-              ? `🔒 Lv.${ULTIMATE_LEVEL}에 궁극기 「${SKILLS[GODS[state.god].ultimate].name}」이 열려요`
-              : null;
-
-  return (
-    <View style={styles.skillArea}>
-      {skills.length > 0 && (
-        <View style={styles.skills}>
-          {skills.map((id) => {
-            const skill = SKILLS[id];
-            const cd = state.skillCooldowns[id] ?? 0;
-            const ready = canCast(state, id);
-            const isUlt = state.god !== null && GODS[state.god].ultimate === id;
-            return (
-              <Pressable
-                key={id}
-                onPress={() => onCast(id)}
-                disabled={!ready}
-                accessibilityRole="button"
-                style={({ pressed }) => [
-                  styles.skill,
-                  isUlt && styles.skillUlt,
-                  !ready && styles.skillCooling,
-                  pressed && { opacity: 0.7, transform: [{ scale: 0.96 }] },
-                ]}
-              >
-                {/* 쿨타임 진행 막대 */}
-                {!ready && <View style={[styles.cooldownFill, { width: `${(1 - cd / skillCooldown(state, id)) * 100}%` }]} />}
-                <Text style={styles.skillEmoji}>{skill.emoji}</Text>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.skillName}>
-                    {skill.name}
-                    {skillLevel(state, id) > 0 && <Text style={styles.skillLv}> +{skillLevel(state, id)}</Text>}
-                  </Text>
-                  <Text style={styles.skillDesc} numberOfLines={2}>
-                    {ready ? skill.description : `${Math.ceil(cd / 1000)}초`}
-                  </Text>
-                </View>
-              </Pressable>
-            );
-          })}
-        </View>
-      )}
-      {nextHint && (
-        <View style={styles.lockedSkills}>
-          <Text style={styles.lockedText}>{nextHint}</Text>
-        </View>
-      )}
-    </View>
   );
 }
 
@@ -323,32 +256,10 @@ const styles = StyleSheet.create({
   diffName: { fontWeight: '900', fontSize: 16 },
   diffBest: { color: colors.subText, fontSize: 12, fontWeight: '700' },
   currency: { color: colors.text, fontSize: 13, fontWeight: '800', marginTop: 2 },
-  skillLv: { color: colors.gold, fontWeight: '900' },
   xpTrack: { height: 8, borderRadius: 4, backgroundColor: colors.panelLight, marginTop: 8 },
   xpFill: { height: '100%', borderRadius: 4, backgroundColor: colors.xp },
   xpText: { color: colors.subText, fontSize: 11, marginTop: 3 },
 
-  skillArea: { marginTop: 12, gap: 10 },
-  lockedSkills: { backgroundColor: colors.panel, borderRadius: 14, padding: 12 },
-  lockedText: { color: colors.subText, fontSize: 13, textAlign: 'center', lineHeight: 19 },
-  skills: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  skill: {
-    flexGrow: 1,
-    flexBasis: '45%',
-    overflow: 'hidden',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: colors.primary,
-    borderRadius: 14,
-    padding: 10,
-  },
-  skillUlt: { flexBasis: '100%', backgroundColor: '#C2410C' },
-  skillCooling: { backgroundColor: colors.disabled },
-  cooldownFill: { position: 'absolute', left: 0, top: 0, bottom: 0, backgroundColor: 'rgba(255,255,255,0.12)' },
-  skillEmoji: { fontSize: 28 },
-  skillName: { color: '#fff', fontWeight: '800', fontSize: 14 },
-  skillDesc: { color: 'rgba(255,255,255,0.8)', fontSize: 11, marginTop: 2 },
 
   weapons: { backgroundColor: colors.panel, borderRadius: 14, padding: 12, marginTop: 12, gap: 8 },
   sectionTitle: { color: colors.text, fontWeight: '800', fontSize: 15 },

@@ -20,14 +20,8 @@ interface Props {
  */
 export function DevPanel({ onSetLevel, onAddGold, onReset, onGiveWeapon, onUnlockRaids, onAddDiamonds }: Props) {
   const buttons: [string, () => void][] = [
-    ['Lv.999', () => onSetLevel(999)],
-    ['Lv.1000', () => onSetLevel(1000)],
-    ['Lv.2000', () => onSetLevel(2000)],
-    ['Lv.3000', () => onSetLevel(3000)],
-    ['Lv.4000', () => onSetLevel(4000)],
-    ['Lv.6000', () => onSetLevel(6000)],
-    ['Lv.8000', () => onSetLevel(8000)],
-    ['Lv.10000', () => onSetLevel(10000)],
+    // 스킬이 열리는 레벨들 (아기 300·600 / 청소년 1000·1300·1600 / 성인 2000·2400·2800 / 신 3000·3400·3800) + 레이드용 10000
+    ...[300, 600, 1000, 1300, 1600, 2000, 2400, 2800, 3000, 3400, 3800, 10000].map((lv): [string, () => void] => [`Lv.${lv}`, () => onSetLevel(lv)]),
     ['골드 ×1000', onAddGold],
     ['💎 +10000', onAddDiamonds],
     ['커먼 ×3', () => [0, 1, 2].forEach(() => onGiveWeapon('wood_stick'))],

@@ -48,7 +48,7 @@ export function DailyPanel({ state, onEnter }: { state: GameState; onEnter: (id:
                 · {g}
               </Text>
             ))}
-            <Text style={styles.gimmick}>· 점수 = 넣은 피해 ÷ 내 초당 피해 · 점수 5점당 💎1</Text>
+            <Text style={styles.gimmick}>· 점수 = 넣은 피해 ÷ 내 초당 피해 · 점수 10점당 💎1</Text>
             {unlocked ? (
               <View style={styles.enterRow}>
                 <Text style={styles.tickets}>

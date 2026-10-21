@@ -32,7 +32,7 @@ export type EffectSpec =
   | { kind: 'thrust'; fromX: number; toX: number; y: number; color: string }
   | { kind: 'ghost'; x: number; bottom: number; sprite: string; scale: number; color: string; dx: number }
   | { kind: 'banner'; text: string; color: string; big: boolean }
-  | { kind: 'toast'; text: string; color: string }
+  | { kind: 'toast'; text: string; color: string; bottom?: number }
   | { kind: 'arrow'; fromX: number; fromY: number; toX: number; toY: number; color: string }
   | { kind: 'island'; x: number; toY: number; size: number }
   | { kind: 'breath'; fromX: number; toX: number; y: number; height: number }
@@ -600,21 +600,23 @@ function Tentacle({ x, bottom, height, tilt, onDone }: { x: number; bottom: numb
 function Thrust({ fromX, toX, y, color, onDone }: { fromX: number; toX: number; y: number; color: string; onDone: () => void }) {
   const p = useProgress(260, onDone, Easing.out(Easing.cubic));
   const gid = useGradientId('th');
-  const len = toX - fromX;
+  // 왼쪽으로 찌를 때(toX < fromX)는 상자를 toX~fromX에 놓고 좌우로 뒤집는다 (폭이 음수가 되지 않게)
+  const dir = toX >= fromX ? 1 : -1;
+  const len = Math.max(1, Math.abs(toX - fromX));
   const h = 18;
   return (
     <Animated.View
       pointerEvents="none"
       style={{
         position: 'absolute',
-        left: fromX,
+        left: Math.min(fromX, toX),
         top: y - h / 2,
         width: len,
         height: h,
         opacity: p.interpolate({ inputRange: [0, 0.4, 1], outputRange: [1, 1, 0] }),
         transform: [
-          { translateX: p.interpolate({ inputRange: [0, 1], outputRange: [-len * 0.6, 0] }) },
-          { scaleX: p.interpolate({ inputRange: [0, 0.35, 1], outputRange: [0.2, 1, 1] }) },
+          { translateX: p.interpolate({ inputRange: [0, 1], outputRange: [-len * 0.6 * dir, 0] }) },
+          { scaleX: p.interpolate({ inputRange: [0, 0.35, 1], outputRange: [0.2 * dir, dir, dir] }) },
         ],
       }}
     >
@@ -709,7 +711,7 @@ function Banner({ text, color, big, onDone }: { text: string; color: string; big
 
 // ───────────── 작은 알림 (무기 획득 등) ─────────────
 
-function Toast({ text, color, onDone }: { text: string; color: string; onDone: () => void }) {
+function Toast({ text, color, bottom, onDone }: { text: string; color: string; bottom?: number; onDone: () => void }) {
   const p = useProgress(1800, onDone, Easing.linear);
   return (
     <Animated.View
@@ -718,17 +720,20 @@ function Toast({ text, color, onDone }: { text: string; color: string; onDone: (
         styles.toast,
         {
           borderColor: color,
+          ...(bottom !== undefined && { bottom }),
           opacity: p.interpolate({ inputRange: [0, 0.08, 0.85, 1], outputRange: [0, 1, 1, 0] }),
           transform: [{ translateY: p.interpolate({ inputRange: [0, 0.08, 1], outputRange: [10, 0, 0] }) }],
         },
       ]}
     >
-      <Text style={[styles.toastText, { color }]}>{text}</Text>
+      <Text style={[styles.toastText, { color }]} numberOfLines={2}>
+        {text}
+      </Text>
     </Animated.View>
   );
 }
 
-// ───────────── 지지직 번개: 두 점 사이를 지그재그로 잇는다 (제우스 자동 공격, 연쇄 번개) ─────────────
+// ───────────── 지지직 번개: 두 점 사이를 지그재그로 잇는다 (제우스 자동 공격과 그 범위 피해) ─────────────
 
 function Zap({
   width,
@@ -968,6 +973,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     paddingHorizontal: 14,
     paddingVertical: 6,
+    maxWidth: '92%',
   },
-  toastText: { fontWeight: '800', fontSize: 13 },
+  toastText: { fontWeight: '800', fontSize: 13, textAlign: 'center' },
 });

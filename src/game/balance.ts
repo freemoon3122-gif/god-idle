@@ -23,7 +23,9 @@ export const OFFLINE_XP_EFFICIENCY = 0.1;
 export const TEEN_LEVEL = 1000;
 export const ADULT_LEVEL = 2000;
 export const GOD_LEVEL = 3000;
-export const ULTIMATE_LEVEL = 10000;
+/** 신의 스킬 3개: 신이 되자마자 1개, Lv.3400에 1개, Lv.3800에 궁극기 (다른 단계처럼 단계 안에서 차례로 열린다) */
+export const GOD_SKILL_LEVELS = [3000, 3400];
+export const ULTIMATE_LEVEL = 3800;
 
 /**
  * 레벨 숫자는 화면에 보이는 값이고, 밸런스 공식은 "레벨 ÷ 10"을 기준으로 계산한다.
@@ -152,15 +154,31 @@ export function monsterKindFor(stage: number) {
 
 // ───────────── 신 & 스킬 ─────────────
 
+/**
+ * 성장 단계마다 3개씩 열리는 공용 스킬 [스킬, 열리는 레벨].
+ * 단계가 올라가도 사라지지 않고 계속 쌓인다 → 아기 3 → 청소년 6 → 성인 9 → 신 12 (신의 스킬 3개 포함)
+ * 각 단계의 첫 스킬은 그 단계가 되자마자, 나머지는 단계 안에서 차례로 열린다.
+ */
+export const STAGE_SKILLS: [SkillId, number][] = [
+  ['baby_star', 1],
+  ['baby_halo', 300],
+  ['baby_feather', 600],
+  ['teen_slash', TEEN_LEVEL],
+  ['teen_dash', 1300],
+  ['teen_laurel', 1600],
+  ['adult_whirl', ADULT_LEVEL],
+  ['adult_shield', 2400],
+  ['adult_meteor', 2800],
+];
+
 export interface GodInfo {
   id: GodId;
   name: string;
   title: string;
   emoji: string;
   passive: string;
-  skills: SkillId[]; // 신이 되자마자 쓰는 스킬
-  extraSkills: [SkillId, number][]; // [스킬, 열리는 레벨]
-  ultimate: SkillId; // Lv.10000에 열리는 궁극기
+  skills: SkillId[]; // GOD_SKILL_LEVELS(Lv.3000, 3400)에 하나씩 열리는 스킬 2개
+  ultimate: SkillId; // Lv.3800에 열리는 궁극기 → 신의 스킬은 모두 3개
 }
 
 export const GODS: Record<GodId, GodInfo> = {
@@ -171,11 +189,6 @@ export const GODS: Record<GodId, GodInfo> = {
     emoji: '⚡',
     passive: '공격 속도 +30%',
     skills: ['zeus_bolt', 'zeus_storm'],
-    extraSkills: [
-      ['zeus_chain', 4000],
-      ['zeus_eagle', 6000],
-      ['zeus_king', 8000],
-    ],
     ultimate: 'zeus_judgment',
   },
   poseidon: {
@@ -185,11 +198,6 @@ export const GODS: Record<GodId, GodInfo> = {
     emoji: '🔱',
     passive: '치명타 확률 +15%, 치명타 피해 4배',
     skills: ['poseidon_wave', 'poseidon_trident'],
-    extraSkills: [
-      ['poseidon_maelstrom', 4000],
-      ['poseidon_quake', 6000],
-      ['poseidon_blessing', 8000],
-    ],
     ultimate: 'poseidon_kraken',
   },
 };
@@ -218,9 +226,42 @@ export interface SkillInfo {
   healRatio?: number;
   /** 광역: 필드의 모든 몬스터를 때린다 (없으면 가장 가까운 한 마리) */
   aoe?: boolean;
+  /** 궁극기: 버튼이 주황 바탕·금색 테두리, 시전할 때 큰 배너와 화면 연출 */
+  ultimate?: boolean;
 }
 
 export const SKILLS: Record<SkillId, SkillInfo> = {
+  // ───── 👶 아기 신 (Lv.1~) ─────
+  baby_star: {
+    id: 'baby_star',
+    name: '별똥별',
+    emoji: '⭐',
+    description: '작은 별을 떨어뜨려 공격력의 3배 피해',
+    cooldown: 5_000,
+    damageMultiplier: 3,
+  },
+  baby_halo: {
+    id: 'baby_halo',
+    name: '후광 부메랑',
+    emoji: '😇',
+    description: '머리 위 후광을 던져 3번 베고 돌아온다. 매번 공격력의 2.5배',
+    cooldown: 8_000,
+    damageMultiplier: 2.5,
+    hits: 3,
+    hitInterval: 150,
+  },
+  baby_feather: {
+    id: 'baby_feather',
+    name: '깃털 폭풍',
+    emoji: '🪶',
+    description: '날개를 퍼덕여 깃털 5개를 흩뿌린다. 모든 적에게 매번 공격력의 2배',
+    cooldown: 16_000,
+    damageMultiplier: 2,
+    hits: 5,
+    hitInterval: 110,
+    aoe: true,
+  },
+  // ───── 🧒 청소년 신 (Lv.1000~) ─────
   teen_slash: {
     id: 'teen_slash',
     name: '삼연참',
@@ -231,6 +272,26 @@ export const SKILLS: Record<SkillId, SkillInfo> = {
     hits: 3,
     hitInterval: 160,
   },
+  teen_dash: {
+    id: 'teen_dash',
+    name: '섬광 돌진',
+    emoji: '💨',
+    description: '번쩍이는 속도로 돌진해 꿰뚫는다. 공격력의 10배',
+    cooldown: 10_000,
+    damageMultiplier: 10,
+  },
+  teen_laurel: {
+    id: 'teen_laurel',
+    name: '월계수 칼날비',
+    emoji: '🍃',
+    description: '날카로운 월계수 잎이 쏟아진다. 모든 적에게 6번, 매번 공격력의 2.5배',
+    cooldown: 18_000,
+    damageMultiplier: 2.5,
+    hits: 6,
+    hitInterval: 100,
+    aoe: true,
+  },
+  // ───── 🛡️ 성인 신 (Lv.2000~) ─────
   adult_whirl: {
     id: 'adult_whirl',
     name: '회오리 검무',
@@ -242,6 +303,28 @@ export const SKILLS: Record<SkillId, SkillInfo> = {
     hitInterval: 130,
     aoe: true,
   },
+  adult_shield: {
+    id: 'adult_shield',
+    name: '방패 강타',
+    emoji: '🛡️',
+    description: '방패로 내리찍어 공격력의 16배 피해 + 보스 제한 시간 3초 증가',
+    cooldown: 12_000,
+    damageMultiplier: 16,
+    bossTimeBonus: 3_000,
+  },
+  adult_meteor: {
+    id: 'adult_meteor',
+    name: '천공의 일격',
+    emoji: '☄️',
+    description: '하늘 높이 뛰어올라 유성처럼 내리꽂는다. 모든 적에게 5번, 매번 공격력의 9배 (궁극기)',
+    cooldown: 60_000,
+    damageMultiplier: 9,
+    hits: 5,
+    hitInterval: 140,
+    aoe: true,
+    ultimate: true,
+  },
+  // ───── ⚡ 제우스 / 🔱 포세이돈 (Lv.3000~) ─────
   zeus_bolt: {
     id: 'zeus_bolt',
     name: '낙뢰',
@@ -258,34 +341,6 @@ export const SKILLS: Record<SkillId, SkillInfo> = {
     cooldown: 40_000,
     buffDuration: 10_000,
   },
-  zeus_chain: {
-    id: 'zeus_chain',
-    name: '연쇄 번개',
-    emoji: '⛓️',
-    description: '번개가 튕기며 5번 이어진다. 매번 공격력의 10배',
-    cooldown: 15_000,
-    damageMultiplier: 10,
-    hits: 5,
-    hitInterval: 90,
-    aoe: true,
-  },
-  zeus_eagle: {
-    id: 'zeus_eagle',
-    name: '독수리 강하',
-    emoji: '🦅',
-    description: '제우스의 독수리 아이토스가 내리꽂힌다. 공격력의 45배, 무조건 치명타',
-    cooldown: 20_000,
-    damageMultiplier: 45,
-    alwaysCrit: true,
-  },
-  zeus_king: {
-    id: 'zeus_king',
-    name: '신들의 왕',
-    emoji: '👑',
-    description: '왕의 권능으로 다른 스킬의 쿨타임을 모두 초기화한다',
-    cooldown: 90_000,
-    cooldownEffect: 'reset',
-  },
   zeus_judgment: {
     id: 'zeus_judgment',
     name: '올림포스의 심판',
@@ -296,6 +351,7 @@ export const SKILLS: Record<SkillId, SkillInfo> = {
     hits: 8,
     hitInterval: 110,
     aoe: true,
+    ultimate: true,
   },
   poseidon_wave: {
     id: 'poseidon_wave',
@@ -315,36 +371,6 @@ export const SKILLS: Record<SkillId, SkillInfo> = {
     cooldown: 40_000,
     buffDuration: 10_000,
   },
-  poseidon_maelstrom: {
-    id: 'poseidon_maelstrom',
-    name: '소용돌이',
-    emoji: '🌀',
-    description: '거대한 소용돌이가 6번 휘감는다. 매번 공격력의 9배',
-    cooldown: 15_000,
-    damageMultiplier: 9,
-    hits: 6,
-    hitInterval: 130,
-    aoe: true,
-  },
-  poseidon_quake: {
-    id: 'poseidon_quake',
-    name: '대지진',
-    emoji: '🌋',
-    description: '「대지를 흔드는 자」의 일격. 공격력의 45배 + 보스 제한 시간 5초 증가',
-    cooldown: 20_000,
-    damageMultiplier: 45,
-    bossTimeBonus: 5_000,
-    aoe: true,
-  },
-  poseidon_blessing: {
-    id: 'poseidon_blessing',
-    name: '바다의 축복',
-    emoji: '🐚',
-    description: '다른 스킬의 쿨타임 절반 + 레이드 중이면 신의 체력 30% 회복',
-    cooldown: 60_000,
-    cooldownEffect: 'halve',
-    healRatio: 0.3,
-  },
   poseidon_kraken: {
     id: 'poseidon_kraken',
     name: '크라켄 강림',
@@ -356,6 +382,7 @@ export const SKILLS: Record<SkillId, SkillInfo> = {
     hitInterval: 170,
     bossTimeBonus: 10_000,
     aoe: true,
+    ultimate: true,
   },
   // ───── 레이드 「기간토마키아」 첫 클리어 보상 ─────
   zeus_gigas: {

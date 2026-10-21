@@ -184,8 +184,8 @@ export function stageMultipliers(id: RaidId, stage: number) {
 //   골드는 최고 웨이브 기준이라 성장할수록 커진다.
 // 거인 체력도 같은 기준 (전사 8초, 투석병 8초, 왕 30초어치, 바퀴마다 ×1.6)
 export const DAILY_LAP_GROWTH = 1.6;
-export const DAILY_GOLD_PER_POINT = 0.5; // 골드 = 최고 웨이브 몬스터 골드 × 점수 × 0.5
-export const DAILY_DIAMONDS_PER_POINT = 0.2; // 점수 5점당 💎1
+export const DAILY_GOLD_PER_POINT = 0.25; // 골드 = 최고 웨이브 몬스터 골드 × 점수 × 0.25 (스킬이 12개로 늘어 점수가 약 200~330 → 550~640점이 되어 0.5에서 낮춤)
+export const DAILY_DIAMONDS_PER_POINT = 0.1; // 점수 10점당 💎1 (스킬 개편 전에는 5점당)
 export const DAILY_DIAMOND_CAP = 100; // 하루 최대 💎100
 
 export function dailyPhaseHp(refHp: number, lap: number, phase: RaidPhase): number {

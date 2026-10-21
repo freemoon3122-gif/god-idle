@@ -42,6 +42,7 @@ import {
   startRaid,
   tap,
   tick,
+  availableSkills,
   awaken,
   toggleAutoMove,
   upgradeBossPassive,
@@ -53,7 +54,7 @@ import { BattleHandle, BattleView } from './src/ui/BattleView';
 import { DevPanel } from './src/ui/DevPanel';
 import { EvolveModal, GodChoiceModal, OfflineModal } from './src/ui/Modals';
 import { DifficultyChip, DifficultyPicker, StatusBar as GameStatusBar, UpgradeList, WeaponPanel } from './src/ui/Panels';
-import { AutoMoveButton, Sheet, SKILL_DOCK_H, SkillDock, TAB_BAR_H, TabBar, TabId, TABS } from './src/ui/Hud';
+import { AutoMoveButton, Sheet, SkillDock, skillDockLayout, TAB_BAR_H, TabBar, TabId, TABS } from './src/ui/Hud';
 import { heroSprite } from './src/ui/sprites';
 import { DailyPanel, RaidPanel, RaidResultModal, StoryModal } from './src/ui/RaidUI';
 import { GachaResultModal, PassivePanel, ShopPanel, SkillUpgradePanel } from './src/ui/ShopUI';
@@ -85,7 +86,7 @@ export default function App() {
  */
 function Game() {
   const insets = useSafeAreaInsets(); // 노치·홈 바 영역 (그 밑에는 버튼을 두지 않는다)
-  const { height: screenH } = useWindowDimensions();
+  const { height: screenH, width: screenW } = useWindowDimensions();
   const [tab, setTab] = useState<TabId | null>(null); // 열려 있는 창 (null = 닫힘)
   const [picking, setPicking] = useState(false); // 난이도 고르는 창
   const [topH, setTopH] = useState(110); // 위쪽 정보 영역의 실제 높이 (재서 전투 화면에 알려 준다)
@@ -220,7 +221,8 @@ function Game() {
     act(() => state, result ? [result] : []);
   };
 
-  const bottomUi = insets.bottom + TAB_BAR_H + SKILL_DOCK_H; // 맵 아래를 덮는 UI 높이
+  // 맵 아래를 덮는 UI 높이 (스킬이 7개가 넘으면 스킬 버튼이 두 줄이 된다)
+  const bottomUi = insets.bottom + TAB_BAR_H + skillDockLayout(availableSkills(game).length, screenW).height;
   const sheetContent: Record<TabId, React.ReactNode> = {
     content: (
       <>
@@ -257,11 +259,7 @@ function Game() {
     ),
     skill: (
       <>
-        {game.god || game.level >= 1000 ? (
-          <SkillUpgradePanel state={game} onUpgrade={(id) => act((s) => upgradeSkill(s, id))} />
-        ) : (
-          <Text style={styles.empty}>Lv.1000 청소년 신이 되면 스킬이 생기고, 강화할 수 있어요.</Text>
-        )}
+        <SkillUpgradePanel state={game} onUpgrade={(id) => act((s) => upgradeSkill(s, id))} />
         <PassivePanel state={game} onBoss={() => act(upgradeBossPassive)} onAwaken={() => act(awaken)} />
       </>
     ),
@@ -279,6 +277,8 @@ function Game() {
         onMove={(m) => (moveRef.current = m)}
         topInset={topH}
         bottomInset={bottomUi}
+        // 아래 창이 열려 있으면 알림(새 스킬 등)을 창 위에 띄운다
+        toastBottom={tab !== null ? insets.bottom + TAB_BAR_H + Math.round(screenH * 0.5) + 8 : undefined}
       />
 
       {/* 위: 레벨·골드·난이도 (맵 위에 반투명하게 겹친다) */}

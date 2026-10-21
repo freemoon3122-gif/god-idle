@@ -1,6 +1,6 @@
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { GOD_LEVEL, GODS, SKILLS } from '../game/balance';
+import { GOD_LEVEL, GOD_SKILL_LEVELS, GODS, SKILLS, ULTIMATE_LEVEL } from '../game/balance';
 import { OfflineReward } from '../game/engine';
 import { formatNumber } from '../game/format';
 import { GodId } from '../game/types';
@@ -46,8 +46,8 @@ export function OfflineModal({ reward, onClose }: { reward: OfflineReward | null
 }
 
 const EVOLVE_TEXT = {
-  teen: { title: '청소년 신으로 성장했다!', body: '검을 들고 「삼연참」을 쓸 수 있어요.\n공격력이 1.5배가 되었어요.' },
-  adult: { title: '성인 신으로 성장했다!', body: `방패와 긴 검으로 「회오리 검무」를 쓸 수 있어요.\n공격력이 2배가 되었어요.\nLv.${GOD_LEVEL}이 되면 진짜 신이 될 수 있어요.` },
+  teen: { title: '청소년 신으로 성장했다!', body: '검을 들고 「삼연참」을 쓸 수 있어요.\nLv.1300 「섬광 돌진」, Lv.1600 「월계수 칼날비」도 배워요.\n아기 때 스킬도 그대로 쓸 수 있고, 공격력이 1.5배가 되었어요.' },
+  adult: { title: '성인 신으로 성장했다!', body: `방패와 긴 검으로 「회오리 검무」를 쓸 수 있어요.\nLv.2400 「방패 강타」, Lv.2800 궁극기 「천공의 일격」도 배워요.\n공격력이 2배가 되었어요. Lv.${GOD_LEVEL}이 되면 진짜 신이 될 수 있어요.` },
 };
 
 export function EvolveModal({ form, onClose }: { form: 'teen' | 'adult' | null; onClose: () => void }) {
@@ -89,15 +89,15 @@ export function GodChoiceModal({ visible, onChoose }: { visible: boolean; onChoo
               </Text>
               <Text style={styles.godTitle}>{god.title}</Text>
               <Text style={styles.godPassive}>패시브: {god.passive}</Text>
-              {god.skills.map((sid) => (
+              {god.skills.map((sid, i) => (
                 <Text key={sid} style={styles.godSkill}>
-                  {SKILLS[sid].emoji} {SKILLS[sid].name}
+                  {SKILLS[sid].emoji} {SKILLS[sid].name} <Text style={{ color: colors.subText, fontSize: 11 }}>Lv.{GOD_SKILL_LEVELS[i]}</Text>
                 </Text>
               ))}
-              {/* 나중에 열리는 스킬은 한 줄로 */}
+              {/* 궁극기는 나중에 열린다 */}
               <Text style={[styles.godSkill, { color: colors.subText, fontSize: 11, textAlign: 'center' }]}>
-                + {god.extraSkills.map(([sid]) => SKILLS[sid].emoji).join(' ')}
-                {'\n'}Lv.{god.extraSkills[0][1]}~{god.extraSkills[god.extraSkills.length - 1][1]}에 열림
+                + 궁극기 {SKILLS[god.ultimate].emoji} {SKILLS[god.ultimate].name}
+                {'\n'}Lv.{ULTIMATE_LEVEL}에 열림
               </Text>
             </Pressable>
           );

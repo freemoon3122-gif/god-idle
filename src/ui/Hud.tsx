@@ -1,7 +1,7 @@
 import { ReactNode, useEffect, useRef } from 'react';
-import { Animated, Easing, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Animated, Easing, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 
-import { GODS, SKILLS } from '../game/balance';
+import { SKILLS } from '../game/balance';
 import { availableSkills, canCast, skillCooldown, skillLevel } from '../game/engine';
 import { GameState, SkillId } from '../game/types';
 import { colors } from './theme';
@@ -10,12 +10,27 @@ const ND = Platform.OS !== 'web';
 
 /**
  * 전체 화면 게임의 겹쳐 그리는 UI(HUD).
- *   - SkillDock: 맵 아래쪽의 동그란 스킬 버튼
+ *   - SkillDock: 맵 아래쪽의 동그란 스킬 버튼 (7개가 넘으면 두 줄)
  *   - TabBar: 맨 아래 탭 4개 (컨텐츠 / 무기강화 / 힘강화 / 스킬강화)
  *   - Sheet: 탭을 누르면 아래에서 올라오는 맵 절반 높이의 창
  */
 
-export const SKILL_DOCK_H = 64;
+export const SKILL_DOCK_H = 64; // 스킬 버튼 한 줄일 때의 높이
+const DOCK_GAP = 6;
+const DOCK_PAD = 8;
+const MAX_PER_ROW = 7;
+
+/**
+ * 스킬 버튼 배치: 스킬이 최대 13개(단계마다 3개 × 4 + 레이드 보상)까지 늘어나므로
+ * 7개가 넘으면 두 줄로 나누고, 화면 폭에 맞춰 버튼 크기를 줄인다 (최대 50pt).
+ */
+export function skillDockLayout(count: number, screenW: number) {
+  const rows = count > MAX_PER_ROW ? 2 : 1;
+  const perRow = Math.max(1, Math.ceil(count / rows));
+  const size = Math.min(50, Math.floor((screenW - DOCK_PAD * 2 - DOCK_GAP * (perRow - 1)) / perRow));
+  const height = rows === 1 ? SKILL_DOCK_H : rows * size + DOCK_GAP + DOCK_PAD * 2;
+  return { rows, perRow, size, height };
+}
 export const TAB_BAR_H = 58;
 
 export type TabId = 'content' | 'weapon' | 'power' | 'skill';
@@ -29,36 +44,49 @@ export const TABS: { id: TabId; emoji: string; label: string }[] = [
 // ───────────── 스킬 버튼: 쿨타임 동안은 아래에서부터 차오르는 어두운 막 ─────────────
 
 export function SkillDock({ state, onCast }: { state: GameState; onCast: (id: SkillId) => void }) {
+  const { width } = useWindowDimensions();
   const skills = availableSkills(state);
+  const { perRow, size, height } = skillDockLayout(skills.length, width);
   if (!skills.length) return <View style={{ height: SKILL_DOCK_H }} pointerEvents="none" />;
+  // 한 줄에 perRow개씩 끊어서 줄마다 가운데 정렬
+  const rows: SkillId[][] = [];
+  for (let i = 0; i < skills.length; i += perRow) rows.push(skills.slice(i, i + perRow));
   return (
-    <View style={styles.dock} pointerEvents="box-none">
-      {skills.map((id) => {
-        const skill = SKILLS[id];
-        const cd = state.skillCooldowns[id] ?? 0;
-        const ready = canCast(state, id);
-        const isUlt = state.god !== null && GODS[state.god].ultimate === id;
-        const lv = skillLevel(state, id);
-        return (
-          <Pressable
-            key={id}
-            onPress={() => onCast(id)}
-            disabled={!ready}
-            accessibilityRole="button"
-            accessibilityLabel={skill.name}
-            style={({ pressed }) => [styles.skill, isUlt && styles.skillUlt, pressed && { transform: [{ scale: 0.9 }] }]}
-          >
-            <Text style={styles.skillEmoji}>{skill.emoji}</Text>
-            {!ready && (
-              <>
-                <View style={[styles.cdFill, { height: `${(cd / skillCooldown(state, id)) * 100}%` }]} />
-                <Text style={styles.cdText}>{Math.ceil(cd / 1000)}</Text>
-              </>
-            )}
-            {lv > 0 && <Text style={styles.skillLv}>+{lv}</Text>}
-          </Pressable>
-        );
-      })}
+    <View style={[styles.dock, { height }]} pointerEvents="box-none">
+      {rows.map((row, r) => (
+        <View key={r} style={styles.dockRow} pointerEvents="box-none">
+          {row.map((id) => {
+            const skill = SKILLS[id];
+            const cd = state.skillCooldowns[id] ?? 0;
+            const ready = canCast(state, id);
+            const lv = skillLevel(state, id);
+            return (
+              <Pressable
+                key={id}
+                onPress={() => onCast(id)}
+                disabled={!ready}
+                accessibilityRole="button"
+                accessibilityLabel={skill.name}
+                style={({ pressed }) => [
+                  styles.skill,
+                  { width: size, height: size, borderRadius: size / 2 },
+                  skill.ultimate && styles.skillUlt,
+                  pressed && { transform: [{ scale: 0.9 }] },
+                ]}
+              >
+                <Text style={[styles.skillEmoji, { fontSize: size * 0.46 }]}>{skill.emoji}</Text>
+                {!ready && (
+                  <>
+                    <View style={[styles.cdFill, { height: `${(cd / skillCooldown(state, id)) * 100}%` }]} />
+                    <Text style={[styles.cdText, { fontSize: size * 0.32 }]}>{Math.ceil(cd / 1000)}</Text>
+                  </>
+                )}
+                {lv > 0 && <Text style={styles.skillLv}>+{lv}</Text>}
+              </Pressable>
+            );
+          })}
+        </View>
+      ))}
     </View>
   );
 }
@@ -141,7 +169,8 @@ export function Sheet({
 }
 
 const styles = StyleSheet.create({
-  dock: { height: SKILL_DOCK_H, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8, paddingHorizontal: 8 },
+  dock: { justifyContent: 'center', alignItems: 'center', gap: DOCK_GAP, paddingHorizontal: DOCK_PAD },
+  dockRow: { flexDirection: 'row', justifyContent: 'center', gap: DOCK_GAP },
   skill: {
     width: 50,
     height: 50,
@@ -153,7 +182,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     overflow: 'hidden',
   },
-  skillUlt: { backgroundColor: 'rgba(194, 65, 12, 0.9)', borderColor: colors.gold, width: 56, height: 56, borderRadius: 28 },
+  skillUlt: { backgroundColor: 'rgba(194, 65, 12, 0.9)', borderColor: colors.gold, borderWidth: 2.5 },
   skillEmoji: { fontSize: 24 },
   cdFill: { position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(10, 6, 25, 0.7)' },
   cdText: { position: 'absolute', color: '#fff', fontWeight: '900', fontSize: 16 },

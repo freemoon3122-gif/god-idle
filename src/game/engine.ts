@@ -25,6 +25,8 @@ import {
   OFFLINE_EFFICIENCY,
   OFFLINE_XP_EFFICIENCY,
   SKILLS,
+  GOD_SKILL_LEVELS,
+  STAGE_SKILLS,
   ULTIMATE_LEVEL,
   upgradeCost,
   upgradeDamage,
@@ -194,6 +196,7 @@ export function migrate(saved: GameState): GameState {
       farming: isBossWave(wave) ? false : saved.farming,
     };
   }
+  saved = dropRemovedSkills(saved);
   return {
     ...saved,
     queuedHits: saved.queuedHits ?? [],
@@ -214,6 +217,31 @@ export function migrate(saved: GameState): GameState {
     bossPassive: saved.bossPassive ?? 0,
     autoMove: saved.autoMove ?? false,
     awaken: saved.awaken ?? 0,
+  };
+}
+
+/**
+ * 스킬 개편(단계마다 3개)으로 없어진 신의 스킬. 강화에 쓴 강화코인은 돌려주고, 쿨타임·예약 타격을 지운다.
+ * 한 번 정리하면 저장 데이터에서 사라지므로 여러 번 불러와도 두 번 돌려주지 않는다.
+ */
+const REMOVED_SKILLS = ['zeus_chain', 'zeus_eagle', 'zeus_king', 'poseidon_maelstrom', 'poseidon_quake', 'poseidon_blessing'];
+
+function dropRemovedSkills(saved: GameState): GameState {
+  const levels = { ...(saved.skillLevels ?? {}) } as Record<string, number>;
+  let refund = 0;
+  for (const id of REMOVED_SKILLS) {
+    const lv = levels[id] ?? 0;
+    refund += lv * (lv + 1); // 비용 2, 4, 6, … 의 합 = lv × (lv + 1)
+    delete levels[id];
+  }
+  const cooldowns = Object.fromEntries(Object.entries(saved.skillCooldowns ?? {}).filter(([id]) => !REMOVED_SKILLS.includes(id)));
+  return {
+    ...saved,
+    coins: (saved.coins ?? 0) + refund,
+    skillLevels: levels,
+    skillCooldowns: cooldowns,
+    queuedHits: (saved.queuedHits ?? []).filter((q) => !REMOVED_SKILLS.includes(q.skill)),
+    buff: saved.buff && REMOVED_SKILLS.includes(saved.buff.skill) ? null : saved.buff,
   };
 }
 
@@ -240,19 +268,21 @@ export function ownedPower(s: GameState, id: WeaponId): number {
   return weaponPower(id, s.weaponEnhance[id] ?? 0, s.god);
 }
 
-/** 지금 쓸 수 있는 스킬 (화면 순서대로: 기본 → 레벨로 열린 스킬 → 레이드 보상 → 궁극기) */
+/**
+ * 지금 쓸 수 있는 스킬 (화면 순서대로).
+ * 단계마다 3개씩 열리는 공용 스킬은 단계가 올라가도 계속 남는다: 아기 3 → 청소년 6 → 성인 9
+ * 신이 되면 신의 스킬이 Lv.3000·3400·3800(궁극기)에 하나씩 → 12개 (레이드 보상 스킬을 얻으면 +1)
+ */
 export function availableSkills(s: GameState): SkillId[] {
+  const list: SkillId[] = STAGE_SKILLS.filter(([, lv]) => s.level >= lv).map(([id]) => id);
   if (s.god) {
     const god = GODS[s.god];
-    const list: SkillId[] = [...god.skills, ...god.extraSkills.filter(([, lv]) => s.level >= lv).map(([id]) => id)];
+    god.skills.forEach((id, i) => s.level >= GOD_SKILL_LEVELS[i] && list.push(id));
+    if (s.level >= ULTIMATE_LEVEL) list.push(god.ultimate);
     const reward = gigantoRewardSkill(s.god);
     if (reward && s.unlockedSkills.includes(reward)) list.push(reward);
-    if (s.level >= ULTIMATE_LEVEL) list.push(god.ultimate);
-    return list;
   }
-  const form = formOf(s.level);
-  if (form === 'adult') return ['teen_slash', 'adult_whirl'];
-  return form === 'teen' ? ['teen_slash'] : [];
+  return list;
 }
 
 export function attacksPerSecond(s: GameState, includeBuff = true): number {
@@ -462,7 +492,7 @@ export function castSkill(state: GameState, id: SkillId, rng: Rng = Math.random)
   result.casts.push(id);
 
   if (skill.buffDuration) s.buff = { skill: id, timeLeft: skill.buffDuration };
-  // 다른 스킬 쿨타임 초기화(신들의 왕) / 절반(바다의 축복)
+  // 다른 스킬 쿨타임 초기화 / 절반 (지금은 쓰는 스킬이 없지만 새 스킬을 위해 남겨 둔다)
   if (skill.cooldownEffect) {
     const next: GameState['skillCooldowns'] = { [id]: cooldown };
     if (skill.cooldownEffect === 'halve') {

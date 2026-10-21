@@ -8,7 +8,9 @@ const SAVE_KEY = 'god-idle/save';
 /** 기기에 저장한다. (Java의 Preferences, 안드로이드 SharedPreferences와 비슷한 key-value 저장소) */
 export async function saveGame(state: GameState): Promise<void> {
   try {
-    await AsyncStorage.setItem(SAVE_KEY, JSON.stringify(state));
+    // 연타 스킬의 남은 타격(queuedHits)은 잠깐 쓰는 상태라 저장하지 않는다.
+    // (스킬이 바뀐 다른 버전으로 불러와도 모르는 스킬의 타격이 남아 멈추지 않게)
+    await AsyncStorage.setItem(SAVE_KEY, JSON.stringify({ ...state, queuedHits: [] }));
   } catch (e) {
     console.warn('저장 실패', e);
   }
