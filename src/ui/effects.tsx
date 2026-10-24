@@ -44,7 +44,7 @@ export type EffectSpec =
    * x, y: 놓을 위치 (anchor가 bottom이면 아래 가운데, 아니면 한가운데) / width: 화면에서의 폭(pt)
    * fromX, fromY: 있으면 그 자리에서 (x, y)까지 날아가며 재생한다 (유성 같은 투사체)
    */
-  | { kind: 'fx'; name: FxName; x: number; y: number; width: number; anchor?: 'center' | 'bottom'; duration?: number; flip?: boolean; rotate?: number; fromX?: number; fromY?: number };
+  | { kind: 'fx'; name: FxName; x: number; y: number; width: number; height?: number; anchor?: 'center' | 'bottom'; duration?: number; flip?: boolean; rotate?: number; fromX?: number; fromY?: number };
 
 export type Effect = EffectSpec & { id: number };
 
@@ -367,7 +367,7 @@ function Debris({ x, y, color, count, power, onDone }: { x: number; y: number; c
         const g = power * 1.6; // 중력
         // 포물선 y(t) = vy·t + g·t² 을 5개 지점으로 근사
         const ys = [0, 0.25, 0.5, 0.75, 1].map((t) => vy * t + g * t * t);
-        return { vx, ys, size: 3 + Math.random() * 6, spin: (Math.random() - 0.5) * 720, white: i % 3 === 0 };
+        return { vx, ys, size: 3 * (1 + Math.floor(Math.random() * 3)), white: i % 3 === 0 }; // 도트 조각: 3·6·9pt 네모, 회전하지 않는다
       }),
     [],
   );
@@ -388,7 +388,6 @@ function Debris({ x, y, color, count, power, onDone }: { x: number; y: number; c
             transform: [
               { translateX: p.interpolate({ inputRange: [0, 1], outputRange: [0, d.vx] }) },
               { translateY: p.interpolate({ inputRange: [0, 0.25, 0.5, 0.75, 1], outputRange: d.ys }) },
-              { rotate: p.interpolate({ inputRange: [0, 1], outputRange: ['0deg', `${d.spin}deg`] }) },
             ],
           }}
         />
@@ -994,6 +993,7 @@ function SpriteFx({
   x,
   y,
   width,
+  height,
   anchor = 'center',
   duration = 380,
   flip,
@@ -1006,6 +1006,7 @@ function SpriteFx({
   x: number;
   y: number;
   width: number;
+  height?: number;
   anchor?: 'center' | 'bottom';
   duration?: number;
   flip?: boolean;
@@ -1017,7 +1018,7 @@ function SpriteFx({
   const sheet = FX[name];
   const p = useProgress(duration, onDone, Easing.linear);
   const w = width;
-  const h = (width * sheet.fh) / sheet.fw;
+  const h = height ?? (width * sheet.fh) / sheet.fw; // 높이를 안 주면 원래 비율대로
   const n = sheet.frames;
   // 진행값 0~1을 프레임 번호로: 각 구간 안에서는 같은 칸에 멈춰 있다가 경계에서 다음 칸으로 (계단 모양)
   const input: number[] = [];

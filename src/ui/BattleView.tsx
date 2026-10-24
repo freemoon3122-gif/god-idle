@@ -1,5 +1,5 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
-import { Animated, Easing, LayoutChangeEvent, PanResponder, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated, Easing, Image, LayoutChangeEvent, PanResponder, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { BOSS_TIME_LIMIT, chapterOf, DIFFICULTIES, isBossWave, SKILLS, stageLabel } from '../game/balance';
 import { availableSkills } from '../game/engine';
@@ -13,6 +13,7 @@ import { RARITY_INFO, WEAPONS } from '../game/weapons';
 import Svg, { Circle, Defs, RadialGradient, Stop } from 'react-native-svg';
 
 import { FxName } from './art/fx';
+import { RAID_BACKGROUNDS } from './art/images';
 import { Effect, EffectSpec, EffectView } from './effects';
 import { FLOAT_CELLS, heroLayout, HeroSprite } from './HeroSprite';
 import { PixelSprite, spriteSize } from './PixelSprite';
@@ -377,6 +378,16 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
   const fx = (name: FxName, x: number, y: number, w: number, opts: { bottom?: boolean; duration?: number; flip?: boolean; rotate?: number; fromX?: number; fromY?: number } = {}) =>
     add({ kind: 'fx', name, x, y, width: w * (raid ? 1.7 : 1), anchor: opts.bottom ? 'bottom' : 'center', duration: opts.duration, flip: opts.flip, rotate: opts.rotate, fromX: opts.fromX, fromY: opts.fromY });
 
+  /** 도트 번개 줄기: (x1,y1) → (x2,y2) 길이만큼 늘이고 그 각도로 돌린다 */
+  const zapFx = (x1: number, y1: number, x2: number, y2: number, thick: number) => {
+    const len = Math.max(12, Math.hypot(x2 - x1, y2 - y1));
+    const angle = (Math.atan2(y2 - y1, x2 - x1) * 180) / Math.PI;
+    add({ kind: 'fx', name: 'zap', x: (x1 + x2) / 2, y: (y1 + y2) / 2, width: len, height: thick, rotate: angle, duration: 180 });
+  };
+  /** 도트 투사체: from → to로 날아간다 (화살처럼 방향이 있는 것은 그 각도로 돌린다) */
+  const shotFx = (name: FxName, fromX: number, fromY: number, toX: number, toY: number, w: number, duration = 160, aim = false) =>
+    add({ kind: 'fx', name, x: toX, y: toY, width: w, fromX, fromY, duration, rotate: aim ? (Math.atan2(toY - fromY, toX - fromX) * 180) / Math.PI : 0 });
+
   /** 강한 타격 한 세트: 도트 타격 불꽃(크면 폭발) + 파편 */
   const impact = (x: number, y: number, color: string, scale: number, big = false) => {
     fx(big ? 'explosion' : 'hit', x, y, (big ? 80 : 56) * scale);
@@ -461,17 +472,17 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
       // 자동 공격의 범위 피해 (숫자까지 띄우면 화면이 너무 어지러워서 생략)
       if (state.god === 'zeus' && chainFrom) {
         // 제우스: 처음 맞은 몬스터에서 이 몬스터로 번개가 이어진다
-        add({ kind: 'zap', width, height: HEIGHT, fromX: chainFrom.monX, fromY: chainFrom.monY, toX: p.monX, toY: p.monY, color: '#FFE97A', thick: 3 });
-        add({ kind: 'glow', x: p.monX, y: p.monY, color: '#FFE97A', size: 46 });
+        zapFx(chainFrom.monX, chainFrom.monY, p.monX, p.monY, 9);
+        fx('hit', p.monX, p.monY, 30, { duration: 220 });
         hitMonster(4);
       } else if (state.god === 'poseidon') {
         // 포세이돈: 퍼져 나온 물결이 닿으면 물보라 (파도가 닿는 시간만큼 늦게)
         later(220, () => {
-          add({ kind: 'debris', x: p.monX, y: p.monY, color: '#BFF4FF', count: 4, power: 30 });
+          fx('splash', p.monX, p.monY, 40, { duration: 300 });
           hitMonster(4);
         });
       } else {
-        add({ kind: 'burst', x: p.monX, y: p.monY, color: orbColor(state), size: 40 });
+        fx('hit', p.monX, p.monY, 30, { duration: 220 });
         hitMonster(4);
       }
       return;
@@ -493,27 +504,25 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
         const color = orbColor(state);
         if (state.god === 'zeus') {
           // 제우스: 손에서 몬스터로 번개가 꽂힌다 (날아가는 시간 없이 바로)
-          add({ kind: 'zap', width, height: HEIGHT, fromX: p.heroX, fromY: p.heroY - 10, toX: p.monX, toY: p.monY, color, thick: 4 });
-          add({ kind: 'glow', x: p.monX, y: p.monY, color, size: 80 });
-          add({ kind: 'debris', x: p.monX, y: p.monY, color, count: 4, power: 36 });
+          zapFx(p.heroX, p.heroY - 10, p.monX, p.monY, 12);
+          fx('hit', p.monX, p.monY, 40, { duration: 240 });
           hitMonster(5);
           if (!skillInSameTick) damageText(hit, 16, colors.text, p);
           return;
         }
-        add({ kind: 'orb', fromX: p.heroX, fromY: p.heroY, toX: p.monX, toY: p.monY, color });
+        shotFx(state.god === 'poseidon' ? 'orb_water' : 'orb_light', p.heroX, p.heroY, p.monX, p.monY, 18);
         if (state.god === 'poseidon') {
           // 포세이돈: 물 구슬이 닿으면 그 자리에서 파도 물결이 동그랗게 퍼진다 (범위 피해 범위만큼)
           later(160, () => {
-            add({ kind: 'ripple', x: p.monX, y: p.monY + 10, size: SPLASH_RANGE * (width / VIEW_W) * 2.4, color });
-            add({ kind: 'debris', x: p.monX, y: p.monY, color: '#E6FBFF', count: 6, power: 44 });
+            fx('ripple', p.monX, p.monY + 10, SPLASH_RANGE * (width / VIEW_W) * 2.4, { duration: 420 });
+            fx('splash', p.monX, p.monY, 44, { duration: 300 });
             hitMonster(5);
             if (!skillInSameTick) damageText(hit, 16, colors.text, p);
           });
           return;
         }
         later(160, () => {
-          add({ kind: 'glow', x: p.monX, y: p.monY, color, size: 70 });
-          add({ kind: 'debris', x: p.monX, y: p.monY, color, count: 4, power: 36 });
+          fx('hit', p.monX, p.monY, 40, { duration: 240 });
           hitMonster(5);
           // 스킬 숫자가 잘 보이도록, 같은 순간에 스킬 타격이 있으면 기본 공격 숫자는 생략
           if (!skillInSameTick) damageText(hit, 16, colors.text, p);
@@ -521,9 +530,8 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
         return;
       }
       case 'tap': {
-        add({ kind: 'crescent', x: p.monX, y: p.monY, angle: Math.random() * 360, radius: 46, color: '#FFFFFF', flip: Math.random() < 0.5 });
-        add({ kind: 'burst', x: p.monX, y: p.monY, color: '#FFFFFF', size: 70 });
-        add({ kind: 'debris', x: p.monX, y: p.monY, color: '#FFFFFF', count: 5, power: 45 });
+        fx('slash_white', p.monX, p.monY, 70, { rotate: Math.random() * 360, flip: Math.random() < 0.5, duration: 240 });
+        fx('hit', p.monX, p.monY, 40, { duration: 240 });
         hitMonster(8);
         shakeIt(3);
         damageText(hit, 18, colors.text, p);
@@ -532,7 +540,7 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
       case 'baby_star': {
         // 별똥별: 하늘에서 별이 떨어져 반짝 터진다
         const C = '#FFE27A';
-        add({ kind: 'orb', fromX: p.monX - 70, fromY: p.monY - 220, toX: p.monX, toY: p.monY, color: C });
+        shotFx('star_shot', p.monX - 70, p.monY - 220, p.monX, p.monY, 30);
         later(160, () => {
           fx('star', p.monX, p.monY, 64);
           hitMonster(12, 40);
@@ -544,7 +552,7 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
       case 'baby_halo': {
         // 후광 부메랑: 첫 타에 후광이 날아가고, 몬스터 둘레에서 금빛 고리가 3번 번쩍인다
         const i = combo?.index ?? 0;
-        if (i === 0) add({ kind: 'orb', fromX: p.heroX, fromY: p.heroY - 45, toX: p.monX, toY: p.monY, color: '#FFE27A' });
+        if (i === 0) shotFx('orb_gold', p.heroX, p.heroY - 45, p.monX, p.monY, 22);
         fx('slash_gold', p.monX, p.monY, last ? 84 : 66, { rotate: i * 120, flip: i % 2 === 1, duration: 300 });
         if (last) fx('holy', p.monX, p.monY, 80);
         hitMonster(last ? 14 : 8, last ? 50 : 0);
@@ -728,10 +736,9 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
         // 헤라클레스의 화살: 언덕에서 날아가 꽂히고, 맞은 거인에게 금빛 「필멸의 표식」이 새겨진다
         const C = '#FFD54A';
         const h = heraclesRef.current;
-        add({ kind: 'arrow', fromX: h.x, fromY: h.y, toX: p.monX - 10, toY: p.monY - 10, color: C });
+        shotFx('arrow', h.x, h.y, p.monX - 10, p.monY - 10, 44, 220, true);
         later(220, () => {
-          add({ kind: 'burst', x: p.monX, y: p.monY, color: C, size: 90, spikes: 8 });
-          add({ kind: 'groundRing', x: p.monX, y: p.monY, color: C, size: 130 });
+          fx('holy', p.monX, p.monY, 76);
           hitMonster(9);
           damageText(hit, 22, C, p);
         });
@@ -749,7 +756,7 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
         if (i % 2 === 1 || last) {
           const fromX = raid?.id === 'gigantomachy' ? h.x : p.heroX;
           const fromY = raid?.id === 'gigantomachy' ? h.y : p.heroY - 30;
-          add({ kind: 'arrow', fromX, fromY, toX: p.monX, toY: p.monY - 10 + (i % 3) * 10, color: '#FFD54A' });
+          shotFx('arrow', fromX, fromY, p.monX, p.monY - 10 + (i % 3) * 10, 44, 200, true);
         }
         impact(p.monX, p.monY, C, last ? 1.8 : 0.8, last);
         hitMonster(last ? 30 : 12, last ? 100 : 20);
@@ -762,7 +769,7 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
         // 니시로스 투척: 섬이 하늘에서 떨어져 내리꽂힌다 → 땅이 갈라지며 큰 충격
         const C = '#5FD3B0';
         const size = Math.max(130, monsterSizeRef.current.w * 1.1);
-        add({ kind: 'island', x: p.monX, toY: p.groundY - 10, size });
+        fx('island', p.monX, p.groundY - size * 0.4, size, { fromX: p.monX, fromY: -size, duration: 390 });
         later(390, () => {
           impact(p.monX, p.monY, '#C9A26B', 1.8, true);
           fx('shockwave', p.monX, p.groundY + 4, 180, { bottom: true, duration: 450 });
@@ -795,7 +802,7 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
       Animated.timing(heroHit, { toValue: 0, duration: 260, useNativeDriver: ND }).start();
       recoil.setValue(-14);
       Animated.spring(recoil, { toValue: 0, friction: 4, tension: 200, useNativeDriver: ND }).start();
-      add({ kind: 'burst', x: p.heroX, y: p.heroY, color, size: 80, spikes: 7 });
+      fx('hit', p.heroX, p.heroY, 50);
       add({ kind: 'damage', x: p.heroX, y: p.heroY - 70, text: `-${formatNumber(damage)}`, color, size: 22, crit: false });
       shakeIt(6);
     });
@@ -826,12 +833,13 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
         // 불길 브레스: 괴물의 입에서 신에게 불길이 뿜어지고, 신은 잠깐 기절
         const mouthX = p.monX - m.w * 0.12;
         const mouthY = p.monTop + m.h * 0.35;
-        add({ kind: 'breath', fromX: mouthX, toX: SIDE - 10, y: mouthY + 20, height: 120 });
+        // 입 → 신 쪽(왼쪽)으로 불길. 도트 브레스는 오른쪽으로 그려져 있어서 뒤집는다
+        add({ kind: 'fx', name: 'breath', x: (mouthX + SIDE - 10) / 2, y: mouthY + 20, width: Math.max(80, mouthX - SIDE + 10), height: 110, flip: true, duration: 700 });
         later(250, () => {
           flashIt('#FF7A1F', 0.5, 400, true);
           shakeIt(14);
           if (raid) add({ kind: 'damage', x: p.heroX, y: p.heroY - 80, text: `-${formatNumber(raid.attack * 3)}`, color: '#FF7A1F', size: 26, crit: true });
-          add({ kind: 'debris', x: p.heroX, y: p.heroY, color: '#FF7A1F', count: 14, power: 90 });
+          fx('explosion', p.heroX, p.heroY, 90);
         });
         add({ kind: 'toast', text: '🔥 불길 브레스! 잠깐 기절했다', color: '#FF7A1F' });
         return;
@@ -849,14 +857,13 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
         return;
       case 'hermes':
         flashIt('#FFFFFF', 0.6, 300);
-        add({ kind: 'rays', x: p.heroX, y: p.heroY, color: '#FFD54A', size: 300 });
-        add({ kind: 'glow', x: p.heroX, y: p.heroY, color: '#FFD54A', size: 220 });
+        fx('aura_gold', p.heroX, p.heroY, 130, { duration: 550 });
         add({ kind: 'banner', text: '힘줄을 되찾았다!', color: colors.gold, big: false });
         return;
       case 'clear':
         flashIt('#FFFFFF', 1, 600, true);
         zoomIt(0.08);
-        add({ kind: 'rays', x: width / 2, y: 150, color: colors.gold, size: 420 });
+        fx('holy', width / 2, 150, 260, { duration: 600 });
         add({ kind: 'banner', text: '레이드 클리어!', color: colors.gold, big: true });
         return;
       case 'fail':
@@ -886,8 +893,8 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
         const targets = r.killedIds.length ? r.killedIds.map((id) => targetPos(id)) : [pos.current];
         later(120, () => {
           for (const p of targets) {
-            add({ kind: 'debris', x: p.monX, y: p.monY, color: '#FFFFFF', count: 8, power: 70 });
-            add({ kind: 'smoke', x: p.monX, y: p.monY + 10, count: 2 });
+            add({ kind: 'debris', x: p.monX, y: p.monY, color: '#FFFFFF', count: 6, power: 70 });
+            fx('smoke', p.monX, p.monY, 44, { duration: 450 });
           }
         });
       }
@@ -904,7 +911,7 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
       if (r.difficultyUnlocked !== null) {
         const d = DIFFICULTIES[r.difficultyUnlocked];
         add({ kind: 'banner', text: `「${d.name}」 난이도 개방!`, color: d.color, big: true });
-        add({ kind: 'rays', x: width / 2, y: 150, color: d.color, size: 420 });
+        fx('holy', width / 2, 150, 260, { duration: 600 });
         flashIt(d.color, 0.7, 500, true);
       }
       for (const id of r.drops) {
@@ -913,8 +920,8 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
         if (w.rarity === 'legend' || w.rarity === 'transcendent') {
           const p = pos.current;
           add({ kind: 'banner', text: `${w.emoji} ${rarity.name} 획득!`, color: rarity.color, big: w.rarity === 'transcendent' });
-          add({ kind: 'rays', x: width / 2, y: 150, color: rarity.color, size: 380 });
-          add({ kind: 'glow', x: p.monX, y: p.monY, color: rarity.color, size: 240 });
+          fx('holy', width / 2, 150, 240, { duration: 600 });
+          fx('star', p.monX, p.monY, 90);
           flashIt(rarity.color, 0.55, 500, true);
           shakeIt(w.rarity === 'transcendent' ? 14 : 6);
         }
@@ -970,8 +977,15 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
             <FieldBackground theme={theme} w={worldW} h={worldH + 28} />
           </Animated.View>
         )}
-        <View style={[styles.ground, { height: bottomInset }, raid && { backgroundColor: raid.id === 'typhoeus' ? '#3A1208' : '#3A2418' }]} />
-        {raid?.id === 'typhoeus' && <View style={[styles.lava, { bottom: bottomInset }]} />}
+        <View style={[styles.ground, { height: bottomInset }, raid && { backgroundColor: raid.id === 'typhoeus' ? '#160C10' : '#2E2218' }]} />
+        {/* 레이드: 도트 배경 한 장 (아래 UI가 덮는 부분은 빼고 화면에 고정) */}
+        {raid && (
+          <Image
+            source={RAID_BACKGROUNDS[raid.id]}
+            style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: bottomInset, width: '100%', height: HEIGHT - bottomInset }}
+            resizeMode="cover"
+          />
+        )}
 
         {/* 헤라클레스: 바위 언덕 위에서 활을 겨눈다 */}
         {raid?.id === 'gigantomachy' && (
@@ -1340,8 +1354,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
   },
   challengeText: { color: '#fff', fontWeight: '800' },
-  lava: { position: 'absolute', left: 0, right: 0, height: 6, backgroundColor: '#FF7A1F', opacity: 0.8 },
-  ledge: { width: 70, height: 14, marginLeft: -10, marginTop: -4, borderRadius: 8, backgroundColor: '#5A3A2A', borderWidth: 2, borderColor: '#1C1430' },
+  ledge: { width: 70, height: 12, marginLeft: -10, marginTop: -4, backgroundColor: '#5A4230', borderWidth: 3, borderColor: '#1A1424' }, // 도트 느낌: 각진 바위 턱
   godHpTrack: { position: 'absolute', bottom: -12, left: 4, height: 6, borderRadius: 3, backgroundColor: 'rgba(0,0,0,0.5)', overflow: 'hidden' },
   godHpFill: { height: '100%', backgroundColor: colors.xp },
   stun: { position: 'absolute', top: -6, alignSelf: 'center', fontSize: 26 },

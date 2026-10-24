@@ -4,7 +4,7 @@ import { Animated, Easing, Image, Platform, Pressable, ScrollView, StyleSheet, T
 import { SKILLS } from '../game/balance';
 import { availableSkills, canCast, skillCooldown, skillLevel } from '../game/engine';
 import { GameState, SkillId } from '../game/types';
-import { SKILL_ICONS } from './art/images';
+import { SKILL_ICONS, UI_ICONS, UiIconName } from './art/images';
 import { colors } from './theme';
 
 const ND = Platform.OS !== 'web';
@@ -35,11 +35,11 @@ export function skillDockLayout(count: number, screenW: number) {
 export const TAB_BAR_H = 58;
 
 export type TabId = 'content' | 'weapon' | 'power' | 'skill';
-export const TABS: { id: TabId; emoji: string; label: string }[] = [
-  { id: 'content', emoji: '🗺️', label: '컨텐츠' },
-  { id: 'weapon', emoji: '⚔️', label: '무기강화' },
-  { id: 'power', emoji: '💪', label: '힘강화' },
-  { id: 'skill', emoji: '📈', label: '스킬강화' },
+export const TABS: { id: TabId; emoji: string; icon: UiIconName; label: string }[] = [
+  { id: 'content', emoji: '🗺️', icon: 'tab_content', label: '컨텐츠' },
+  { id: 'weapon', emoji: '⚔️', icon: 'tab_weapon', label: '무기강화' },
+  { id: 'power', emoji: '💪', icon: 'tab_power', label: '힘강화' },
+  { id: 'skill', emoji: '📈', icon: 'tab_skill', label: '스킬강화' },
 ];
 
 // ───────────── 스킬 버튼: 쿨타임 동안은 아래에서부터 차오르는 어두운 막 ─────────────
@@ -92,6 +92,11 @@ export function SkillDock({ state, onCast }: { state: GameState; onCast: (id: Sk
   );
 }
 
+/** UI 도트 아이콘 (탭·재화·자동 이동) */
+export function UiIcon({ name, size }: { name: UiIconName; size: number }) {
+  return <Image source={UI_ICONS[name]} style={{ width: size, height: size }} resizeMode="contain" />;
+}
+
 /** 스킬 아이콘: 도트 그림이 있으면 그림, 없으면 이모지 (스킬 버튼·스킬 강화 창에서 같이 쓴다) */
 export function SkillIcon({ id, size }: { id: SkillId; size: number }) {
   const icon = SKILL_ICONS[id];
@@ -110,7 +115,7 @@ export function AutoMoveButton({ on, onPress }: { on: boolean; onPress: () => vo
       accessibilityLabel="자동 이동"
       style={({ pressed }) => [styles.auto, on && styles.autoOn, pressed && { transform: [{ scale: 0.92 }] }]}
     >
-      <Text style={styles.autoEmoji}>🤖</Text>
+      <UiIcon name="auto" size={18} />
       <Text style={[styles.autoText, on && { color: colors.gold }]}>{on ? '자동 ON' : '자동 OFF'}</Text>
     </Pressable>
   );
@@ -123,7 +128,7 @@ export function TabBar({ active, onPress, bottomPad }: { active: TabId | null; o
     <View style={[styles.tabBar, { paddingBottom: bottomPad, height: TAB_BAR_H + bottomPad }]}>
       {TABS.map((t) => (
         <Pressable key={t.id} onPress={() => onPress(t.id)} accessibilityRole="tab" style={[styles.tab, active === t.id && styles.tabActive]}>
-          <Text style={styles.tabEmoji}>{t.emoji}</Text>
+          <UiIcon name={t.icon} size={26} />
           <Text style={[styles.tabLabel, active === t.id && { color: colors.gold }]}>{t.label}</Text>
         </Pressable>
       ))}
@@ -210,12 +215,10 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.25)',
   },
   autoOn: { borderColor: colors.gold, backgroundColor: 'rgba(60, 44, 10, 0.85)' },
-  autoEmoji: { fontSize: 16 },
   autoText: { color: colors.subText, fontWeight: '900', fontSize: 12 },
   tabBar: { flexDirection: 'row', backgroundColor: 'rgba(14, 10, 30, 0.96)', borderTopWidth: 1, borderTopColor: colors.border },
   tab: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 6 },
   tabActive: { backgroundColor: 'rgba(255, 213, 74, 0.08)' },
-  tabEmoji: { fontSize: 22 },
   tabLabel: { color: colors.subText, fontSize: 11, fontWeight: '800', marginTop: 2 },
 
   sheet: {

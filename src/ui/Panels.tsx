@@ -5,6 +5,7 @@ import { bulkPlan, canEnhance, canFuse, formName, ownedPower } from '../game/eng
 import { formatNumber } from '../game/format';
 import { GameState, UpgradeId } from '../game/types';
 import { FUSE_COST, RARITY_INFO, WEAPON_LIST, WeaponId, WEAPONS } from '../game/weapons';
+import { UiIcon } from './Hud';
 import { colors } from './theme';
 
 /** 상단: 레벨, 경험치, 골드 */
@@ -16,11 +17,17 @@ export function StatusBar({ state }: { state: GameState }) {
         <Text style={styles.level}>
           Lv.{state.level} <Text style={styles.form}>{formName(state)}</Text>
         </Text>
-        <View style={{ alignItems: 'flex-end' }}>
-          <Text style={styles.gold}>💰 {formatNumber(state.gold)}</Text>
-          <Text style={styles.currency}>
-            💎 {formatNumber(state.diamonds)}  🪙 {formatNumber(state.coins)}
-          </Text>
+        <View style={{ alignItems: 'flex-end', gap: 2 }}>
+          <View style={styles.money}>
+            <UiIcon name="gold" size={18} />
+            <Text style={styles.gold}>{formatNumber(state.gold)}</Text>
+          </View>
+          <View style={styles.money}>
+            <UiIcon name="diamond" size={14} />
+            <Text style={styles.currency}>{formatNumber(state.diamonds)}</Text>
+            <UiIcon name="coin" size={14} />
+            <Text style={styles.currency}>{formatNumber(state.coins)}</Text>
+          </View>
         </View>
       </View>
       <View style={styles.xpTrack}>
@@ -241,6 +248,7 @@ export function UpgradeList({ state, buyAmount, onChangeAmount, onBuy }: Upgrade
 }
 
 const styles = StyleSheet.create({
+  money: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   status: { paddingVertical: 10 },
   statusRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' },
   level: { color: colors.text, fontSize: 22, fontWeight: '900' },
@@ -255,7 +263,7 @@ const styles = StyleSheet.create({
   diffRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderWidth: 1.5, borderRadius: 12, paddingVertical: 12, paddingHorizontal: 14 },
   diffName: { fontWeight: '900', fontSize: 16 },
   diffBest: { color: colors.subText, fontSize: 12, fontWeight: '700' },
-  currency: { color: colors.text, fontSize: 13, fontWeight: '800', marginTop: 2 },
+  currency: { color: colors.text, fontSize: 13, fontWeight: '800' },
   xpTrack: { height: 8, borderRadius: 4, backgroundColor: colors.panelLight, marginTop: 8 },
   xpFill: { height: '100%', borderRadius: 4, backgroundColor: colors.xp },
   xpText: { color: colors.subText, fontSize: 11, marginTop: 3 },

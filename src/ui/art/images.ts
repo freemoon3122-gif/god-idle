@@ -84,3 +84,22 @@ export const SKILL_ICONS: Partial<Record<SkillId, ImageSourcePropType>> = {
   zeus_gigas: require('../../../assets/icons/zeus_gigas.png'),
   poseidon_nisyros: require('../../../assets/icons/poseidon_nisyros.png'),
 };
+
+/** 레이드 배경 (화면에 고정된 한 장, tools/pixel/ui_icons.py로 만든다) */
+export const RAID_BACKGROUNDS: Record<'gigantomachy' | 'typhoeus', ImageSourcePropType> = {
+  gigantomachy: require('../../../assets/sprites/bg_raid_giganto.png'),
+  typhoeus: require('../../../assets/sprites/bg_raid_typhoeus.png'),
+};
+
+/** UI 도트 아이콘 (하단 탭, 재화, 자동 이동) */
+export const UI_ICONS = {
+  tab_content: require('../../../assets/ui/tab_content.png'),
+  tab_weapon: require('../../../assets/ui/tab_weapon.png'),
+  tab_power: require('../../../assets/ui/tab_power.png'),
+  tab_skill: require('../../../assets/ui/tab_skill.png'),
+  gold: require('../../../assets/ui/gold.png'),
+  diamond: require('../../../assets/ui/diamond.png'),
+  coin: require('../../../assets/ui/coin.png'),
+  auto: require('../../../assets/ui/auto.png'),
+} satisfies Record<string, ImageSourcePropType>;
+export type UiIconName = keyof typeof UI_ICONS;

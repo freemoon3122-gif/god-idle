@@ -9,7 +9,7 @@ export interface FxSheet {
   fh: number;
 }
 
-export type FxName = 'bolt' | 'slash_cyan' | 'slash_orange' | 'slash_green' | 'slash_gold' | 'hit' | 'explosion' | 'splash' | 'wave' | 'star' | 'meteor' | 'feather' | 'leaf' | 'tornado' | 'shockwave' | 'holy' | 'tentacle' | 'dash' | 'aura_gold' | 'aura_blue';
+export type FxName = 'bolt' | 'slash_cyan' | 'slash_orange' | 'slash_green' | 'slash_gold' | 'hit' | 'explosion' | 'splash' | 'wave' | 'star' | 'meteor' | 'feather' | 'leaf' | 'tornado' | 'shockwave' | 'holy' | 'tentacle' | 'dash' | 'aura_gold' | 'aura_blue' | 'slash_white' | 'zap' | 'orb_light' | 'orb_water' | 'orb_gold' | 'star_shot' | 'ripple' | 'smoke' | 'arrow' | 'breath' | 'island';
 
 export const FX: Record<FxName, FxSheet> = {
   bolt: { source: require('../../../assets/fx/bolt.png'), frames: 6, fw: 24, fh: 96 },
@@ -32,4 +32,15 @@ export const FX: Record<FxName, FxSheet> = {
   dash: { source: require('../../../assets/fx/dash.png'), frames: 5, fw: 64, fh: 24 },
   aura_gold: { source: require('../../../assets/fx/aura_gold.png'), frames: 6, fw: 48, fh: 48 },
   aura_blue: { source: require('../../../assets/fx/aura_blue.png'), frames: 6, fw: 48, fh: 48 },
+  slash_white: { source: require('../../../assets/fx/slash_white.png'), frames: 6, fw: 48, fh: 48 },
+  zap: { source: require('../../../assets/fx/zap.png'), frames: 4, fw: 48, fh: 12 },
+  orb_light: { source: require('../../../assets/fx/orb_light.png'), frames: 4, fw: 14, fh: 14 },
+  orb_water: { source: require('../../../assets/fx/orb_water.png'), frames: 4, fw: 14, fh: 14 },
+  orb_gold: { source: require('../../../assets/fx/orb_gold.png'), frames: 4, fw: 14, fh: 14 },
+  star_shot: { source: require('../../../assets/fx/star_shot.png'), frames: 4, fw: 20, fh: 20 },
+  ripple: { source: require('../../../assets/fx/ripple.png'), frames: 6, fw: 64, fh: 24 },
+  smoke: { source: require('../../../assets/fx/smoke.png'), frames: 6, fw: 32, fh: 32 },
+  arrow: { source: require('../../../assets/fx/arrow.png'), frames: 2, fw: 28, fh: 9 },
+  breath: { source: require('../../../assets/fx/breath.png'), frames: 6, fw: 96, fh: 32 },
+  island: { source: require('../../../assets/fx/island.png'), frames: 2, fw: 44, fh: 40 },
 };

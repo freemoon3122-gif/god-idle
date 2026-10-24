@@ -584,6 +584,180 @@ def fx_aura(color):
     return frames
 
 
+
+# ───────────── 자동 공격·투사체·레이드 연출 ─────────────
+
+def fx_zap():
+    """지지직 번개 한 줄기 (가로). 게임이 두 점 사이 길이로 늘이고 각도만큼 돌린다"""
+    W, H = 48, 12
+    n = 4
+    frames = []
+    for f in range(n):
+        s = Sprite(W, H)
+        rnd = random.Random(f * 7 + 3)
+        pts = [(0, 6)] + [(x, 6 + rnd.randint(-4, 4)) for x in range(6, W - 4, 6)] + [(W - 1, 6)]
+        w = [1.4, 1.8, 1.4, 0.8][f]
+        for rad, col in ((w + 1.0, RAMP['bolt'][3]), (w + 0.4, RAMP['bolt'][2]), (w, RAMP['bolt'][1]), (max(0.5, w - 0.8), '#FFFFFF')):
+            for a, b in zip(pts, pts[1:]):
+                thick_line(s, *a, *b, rad, col)
+        frames.append(s)
+    return frames
+
+
+def fx_orb(ramp_name):
+    """빛 구슬 투사체 (반짝이며 날아간다)"""
+    W = H = 14
+    n = 4
+    ramp = RAMP[ramp_name]
+    frames = []
+    for f in range(n):
+        s = Sprite(W, H)
+        r = [5, 5.5, 5, 4.6][f]
+        disc(s, 7, 7, r + 1, ramp[3])
+        disc(s, 7, 7, r, ramp[2])
+        disc(s, 6.5, 6.5, r * 0.6, ramp[1])
+        disc(s, 6, 6, r * 0.3, ramp[0])
+        sparkle(s, [2, 11, 11, 2][f], [2, 2, 11, 11][f], ramp[0])
+        frames.append(s)
+    return frames
+
+
+def fx_star_shot():
+    """떨어지는 별 (별똥별 투사체)"""
+    W = H = 20
+    n = 4
+    ramp = RAMP['gold']
+    frames = []
+    for f in range(n):
+        s = Sprite(W, H)
+        for k in range(5):  # 꼬리 (왼쪽 위)
+            disc(s, 12 - k * 2, 8 - k * 1.6, 2.6 - k * 0.45, ramp[2 if k < 2 else 3])
+        rot = -90 + f * 18
+        poly(s, star_poly(13, 11, 6.5, 3, rot), ramp[3])
+        poly(s, star_poly(13, 11, 5.2, 2.4, rot), ramp[2])
+        poly(s, star_poly(12.5, 10.5, 2.8, 1.3, rot), ramp[1])
+        s.px(12, 10, '#FFFFFF')
+        frames.append(s)
+    return frames
+
+
+def fx_ripple():
+    """물결 고리: 물 구슬이 닿은 자리에서 동그랗게 퍼진다 (위에서 본 타원)"""
+    W, H = 64, 24
+    n = 6
+    ramp = RAMP['water']
+    frames = []
+    for f in range(n):
+        s = Sprite(W, H)
+        for k, d in enumerate((0, 9)):
+            rx = 6 + f * 5 - d
+            if rx < 3:
+                continue
+            col = ramp[2 if f < 4 else 3] if k == 0 else ramp[3]
+            ellipse_ring(s, 32, 12, rx, rx * 0.34, 1.6, col)
+            if f < 4:
+                ellipse_ring(s, 32, 11.5, rx - 1, rx * 0.34 - 0.6, 0.8, ramp[0 if k == 0 else 1])
+        if f < 2:
+            ellipse(s, 32, 12, 5 - f * 2, 2, ramp[1])
+        frames.append(s)
+    return frames
+
+
+def fx_smoke():
+    """흙먼지 연기: 뭉게뭉게 올라가며 옅어진다"""
+    W = H = 32
+    n = 6
+    ramp = RAMP['smoke']
+    rnd = random.Random('smoke')
+    puffs = [(rnd.uniform(-7, 7), rnd.uniform(-3, 3), rnd.uniform(4, 6)) for _ in range(5)]
+    frames = []
+    for f in range(n):
+        s = Sprite(W, H)
+        for bx, by, br in puffs:
+            r = br * (0.6 + f * 0.15) * (1 if f < 4 else 0.8)
+            y = 22 + by - f * 2.5
+            disc(s, 16 + bx * (1 + f * 0.1), y, r, ramp[3 if f >= 4 else 2])
+            disc(s, 15 + bx * (1 + f * 0.1), y - 1, r * 0.55, ramp[1 if f < 4 else 2])
+        frames.append(s)
+    return frames
+
+
+def fx_arrow():
+    """금빛 화살 (오른쪽을 향함). 게임이 날아가는 방향으로 돌린다"""
+    W, H = 28, 9
+    n = 2
+    frames = []
+    for f in range(n):
+        s = Sprite(W, H)
+        g = RAMP['gold']
+        # 빛꼬리
+        s.hline(0, 4, 8, g[2] if f == 0 else g[1])
+        s.hline(2, 3, 5, g[1])
+        # 깃
+        s.rect(6, 2, 3, 2, '#E8403E')
+        s.rect(6, 5, 3, 2, '#E8403E')
+        # 화살대 + 촉
+        s.hline(6, 4, 16, '#8A5428')
+        poly(s, [(21, 1), (W, 4.5), (21, 8)], g[3])
+        poly(s, [(22, 2.5), (W - 2, 4.5), (22, 6.5)], g[1])
+        s.px(W - 3, 4, '#FFFFFF')
+        frames.append(s)
+    return frames
+
+
+def fx_breath():
+    """티포에우스의 불길 브레스: 오른쪽으로 뿜어져 나가는 불기둥 (게임이 왼쪽으로 뒤집어 쓴다)"""
+    W, H = 96, 32
+    n = 6
+    ramp = RAMP['fire']
+    frames = []
+    for f in range(n):
+        s = Sprite(W, H)
+        reach = [0.3, 0.65, 1.0, 1.0, 1.0, 0.8][f]
+        L = W * reach
+        rnd = random.Random(f)
+        for k in range(int(L / 3)):
+            t = k * 3 / W
+            x = k * 3
+            r = 3 + t * 10 * (0.8 if f == 5 else 1)
+            y = 16 + math.sin(k * 0.9 + f) * 2
+            # 바깥(붉은 테) → 주황 → 노랑 → 흰 심. 멀어질수록 심이 가늘어진다
+            disc(s, x, y, r + 1, ramp[3])
+            disc(s, x, y, r * 0.8, ramp[2])
+            disc(s, x, y, r * 0.5, ramp[1])
+            if t < 0.75:
+                disc(s, x, y, r * 0.25 + 0.5, ramp[0])
+        for _ in range(10):
+            s.px(int(rnd.uniform(L * 0.3, L)), int(16 + rnd.uniform(-14, 14)), ramp[1])
+        frames.append(s)
+    return frames
+
+
+def fx_island():
+    """니시로스 섬 (떨어지는 투사체): 풀 덮인 바위섬, 아래로 돌가루"""
+    W, H = 44, 40
+    n = 2
+    frames = []
+    rock = RAMP['dust']
+    grass = RAMP['green']
+    for f in range(n):
+        s = Sprite(W, H)
+        poly(s, [(4, 14), (40, 14), (34, 30), (22, 38), (10, 30)], rock[3])
+        poly(s, [(7, 15), (37, 15), (31, 28), (22, 34), (13, 28)], rock[2])
+        poly(s, [(9, 16), (22, 16), (18, 26), (13, 24)], rock[1])
+        ellipse(s, 22, 13, 19, 6, grass[3])
+        ellipse(s, 22, 12, 17, 5, grass[2])
+        ellipse(s, 18, 11, 9, 2.5, grass[1])
+        # 나무 한 그루
+        s.rect(27, 3, 2, 8, '#6E4420')
+        disc(s, 28, 4, 4, grass[3])
+        disc(s, 27, 3, 2.6, grass[1])
+        for k in range(4):
+            s.px(10 + k * 7 + f, 36 + (k % 2) * 2 + f, rock[2])
+        frames.append(s)
+    return frames
+
+
 EFFECTS = {
     'bolt': fx_bolt,
     'slash_cyan': lambda: fx_slash('cyan'),
@@ -605,6 +779,17 @@ EFFECTS = {
     'dash': fx_dash,
     'aura_gold': lambda: fx_aura('gold'),
     'aura_blue': lambda: fx_aura('water'),
+    'slash_white': lambda: fx_slash('white'),
+    'zap': fx_zap,
+    'orb_light': lambda: fx_orb('white'),
+    'orb_water': lambda: fx_orb('water'),
+    'orb_gold': lambda: fx_orb('gold'),
+    'star_shot': fx_star_shot,
+    'ripple': fx_ripple,
+    'smoke': fx_smoke,
+    'arrow': fx_arrow,
+    'breath': fx_breath,
+    'island': fx_island,
 }
 
 
