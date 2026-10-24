@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import { Animated, Easing, Platform, StyleSheet, Text, View } from 'react-native';
 import Svg, { Circle, Defs, Ellipse, G, LinearGradient, Path, Polygon, Polyline, RadialGradient, Stop } from 'react-native-svg';
 
+import { FX, FxName } from './art/fx';
 import { PixelSprite } from './PixelSprite';
 
 /*
@@ -37,7 +38,13 @@ export type EffectSpec =
   | { kind: 'island'; x: number; toY: number; size: number }
   | { kind: 'breath'; fromX: number; toX: number; y: number; height: number }
   | { kind: 'zap'; width: number; height: number; fromX: number; fromY: number; toX: number; toY: number; color: string; thick: number }
-  | { kind: 'ripple'; x: number; y: number; size: number; color: string };
+  | { kind: 'ripple'; x: number; y: number; size: number; color: string }
+  /**
+   * 도트 이펙트 애니메이션 (assets/fx/*.png 가로 띠 한 장 = 프레임 여러 개).
+   * x, y: 놓을 위치 (anchor가 bottom이면 아래 가운데, 아니면 한가운데) / width: 화면에서의 폭(pt)
+   * fromX, fromY: 있으면 그 자리에서 (x, y)까지 날아가며 재생한다 (유성 같은 투사체)
+   */
+  | { kind: 'fx'; name: FxName; x: number; y: number; width: number; anchor?: 'center' | 'bottom'; duration?: number; flip?: boolean; rotate?: number; fromX?: number; fromY?: number };
 
 export type Effect = EffectSpec & { id: number };
 
@@ -89,6 +96,8 @@ export function EffectView({ effect, onDone }: { effect: Effect; onDone: (id: nu
       return <Zap {...e} onDone={done} />;
     case 'ripple':
       return <Ripple {...e} onDone={done} />;
+    case 'fx':
+      return <SpriteFx {...e} onDone={done} />;
   }
 }
 
@@ -977,3 +986,73 @@ const styles = StyleSheet.create({
   },
   toastText: { fontWeight: '800', fontSize: 13, textAlign: 'center' },
 });
+
+// ───────────── 도트 이펙트: 가로 띠 이미지를 한 칸씩 넘겨 보여 준다 (플립북) ─────────────
+
+function SpriteFx({
+  name,
+  x,
+  y,
+  width,
+  anchor = 'center',
+  duration = 380,
+  flip,
+  rotate = 0,
+  fromX,
+  fromY,
+  onDone,
+}: {
+  name: FxName;
+  x: number;
+  y: number;
+  width: number;
+  anchor?: 'center' | 'bottom';
+  duration?: number;
+  flip?: boolean;
+  rotate?: number;
+  fromX?: number;
+  fromY?: number;
+  onDone: () => void;
+}) {
+  const sheet = FX[name];
+  const p = useProgress(duration, onDone, Easing.linear);
+  const w = width;
+  const h = (width * sheet.fh) / sheet.fw;
+  const n = sheet.frames;
+  // 진행값 0~1을 프레임 번호로: 각 구간 안에서는 같은 칸에 멈춰 있다가 경계에서 다음 칸으로 (계단 모양)
+  const input: number[] = [];
+  const output: number[] = [];
+  for (let i = 0; i < n; i++) {
+    input.push(i / n, (i + 1) / n - 0.0001);
+    output.push(-i * w, -i * w);
+  }
+  const frameX = p.interpolate({ inputRange: input, outputRange: output });
+  const left = x - w / 2;
+  const top = anchor === 'bottom' ? y - h : y - h / 2;
+  const moving = fromX !== undefined && fromY !== undefined;
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={{
+        position: 'absolute',
+        left,
+        top,
+        width: w,
+        height: h,
+        overflow: 'hidden',
+        transform: [
+          ...(moving
+            ? [
+                { translateX: p.interpolate({ inputRange: [0, 1], outputRange: [fromX! - x, 0] }) },
+                { translateY: p.interpolate({ inputRange: [0, 1], outputRange: [fromY! - y, 0] }) },
+              ]
+            : []),
+          { rotate: `${rotate}deg` },
+          { scaleX: flip ? -1 : 1 },
+        ],
+      }}
+    >
+      <Animated.Image source={sheet.source} style={{ width: w * n, height: h, transform: [{ translateX: frameX }] }} resizeMode="stretch" />
+    </Animated.View>
+  );
+}

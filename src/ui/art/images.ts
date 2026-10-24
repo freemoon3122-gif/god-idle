@@ -1,5 +1,7 @@
 import { ImageSourcePropType } from 'react-native';
 
+import { SkillId } from '../../game/types';
+
 /**
  * PNG 그림 (직접 그린 일러스트). 여기 등록한 이름은 벡터 그림 대신 PNG로 그린다.
  * 등록하지 않은 이름은 지금처럼 벡터 그림(art/*.tsx)으로 그린다 → 하나씩 바꿔 가도 된다.
@@ -60,4 +62,25 @@ export const BACKGROUND_IMAGES: Partial<Record<'zeus' | 'poseidon' | 'earth', Im
   earth: require('../../../assets/sprites/bg_earth.png'),
   zeus: require('../../../assets/sprites/bg_zeus.png'),
   poseidon: require('../../../assets/sprites/bg_poseidon.png'),
+};
+
+/** 스킬 버튼 아이콘 (도트 그림, tools/pixel/skill_icons.py로 만든다). 없는 스킬은 이모지로 보여 준다 */
+export const SKILL_ICONS: Partial<Record<SkillId, ImageSourcePropType>> = {
+  baby_star: require('../../../assets/icons/baby_star.png'),
+  baby_halo: require('../../../assets/icons/baby_halo.png'),
+  baby_feather: require('../../../assets/icons/baby_feather.png'),
+  teen_slash: require('../../../assets/icons/teen_slash.png'),
+  teen_dash: require('../../../assets/icons/teen_dash.png'),
+  teen_laurel: require('../../../assets/icons/teen_laurel.png'),
+  adult_whirl: require('../../../assets/icons/adult_whirl.png'),
+  adult_shield: require('../../../assets/icons/adult_shield.png'),
+  adult_meteor: require('../../../assets/icons/adult_meteor.png'),
+  zeus_bolt: require('../../../assets/icons/zeus_bolt.png'),
+  zeus_storm: require('../../../assets/icons/zeus_storm.png'),
+  zeus_judgment: require('../../../assets/icons/zeus_judgment.png'),
+  poseidon_wave: require('../../../assets/icons/poseidon_wave.png'),
+  poseidon_trident: require('../../../assets/icons/poseidon_trident.png'),
+  poseidon_kraken: require('../../../assets/icons/poseidon_kraken.png'),
+  zeus_gigas: require('../../../assets/icons/zeus_gigas.png'),
+  poseidon_nisyros: require('../../../assets/icons/poseidon_nisyros.png'),
 };

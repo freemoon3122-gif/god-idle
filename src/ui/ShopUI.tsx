@@ -26,6 +26,7 @@ import { availableSkills, canAwaken, canUpgradeBossPassive, canUpgradeSkill, ski
 import { formatNumber } from '../game/format';
 import { GameState, SkillId } from '../game/types';
 import { RARITY_INFO, RARITY_ORDER, WeaponId, WEAPONS } from '../game/weapons';
+import { SkillIcon } from './Hud';
 import { colors } from './theme';
 
 const ND = Platform.OS !== 'web';
@@ -50,7 +51,7 @@ export function SkillUpgradePanel({ state, onUpgrade }: { state: GameState; onUp
         const ok = canUpgradeSkill(state, id);
         return (
           <View key={id} style={styles.row}>
-            <Text style={styles.emoji}>{skill.emoji}</Text>
+            <SkillIcon id={id} size={32} />
             <View style={{ flex: 1 }}>
               <Text style={styles.name}>
                 {skill.name} <Text style={styles.lv}>Lv.{lv}</Text>

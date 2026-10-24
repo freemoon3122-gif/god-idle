@@ -1,9 +1,10 @@
 import { ReactNode, useEffect, useRef } from 'react';
-import { Animated, Easing, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Animated, Easing, Image, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 
 import { SKILLS } from '../game/balance';
 import { availableSkills, canCast, skillCooldown, skillLevel } from '../game/engine';
 import { GameState, SkillId } from '../game/types';
+import { SKILL_ICONS } from './art/images';
 import { colors } from './theme';
 
 const ND = Platform.OS !== 'web';
@@ -74,7 +75,7 @@ export function SkillDock({ state, onCast }: { state: GameState; onCast: (id: Sk
                   pressed && { transform: [{ scale: 0.9 }] },
                 ]}
               >
-                <Text style={[styles.skillEmoji, { fontSize: size * 0.46 }]}>{skill.emoji}</Text>
+                <SkillIcon id={id} size={size * 0.78} />
                 {!ready && (
                   <>
                     <View style={[styles.cdFill, { height: `${(cd / skillCooldown(state, id)) * 100}%` }]} />
@@ -89,6 +90,13 @@ export function SkillDock({ state, onCast }: { state: GameState; onCast: (id: Sk
       ))}
     </View>
   );
+}
+
+/** 스킬 아이콘: 도트 그림이 있으면 그림, 없으면 이모지 (스킬 버튼·스킬 강화 창에서 같이 쓴다) */
+export function SkillIcon({ id, size }: { id: SkillId; size: number }) {
+  const icon = SKILL_ICONS[id];
+  if (icon) return <Image source={icon} style={{ width: size, height: size }} resizeMode="contain" />;
+  return <Text style={{ fontSize: size * 0.6 }}>{SKILLS[id].emoji}</Text>;
 }
 
 // ───────────── 🤖 자동 이동 켜기/끄기 (스킬 버튼 줄 오른쪽 위) ─────────────
@@ -183,7 +191,6 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   skillUlt: { backgroundColor: 'rgba(194, 65, 12, 0.9)', borderColor: colors.gold, borderWidth: 2.5 },
-  skillEmoji: { fontSize: 24 },
   cdFill: { position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(10, 6, 25, 0.7)' },
   cdText: { position: 'absolute', color: '#fff', fontWeight: '900', fontSize: 16 },
   skillLv: { position: 'absolute', top: 1, right: 6, color: colors.gold, fontSize: 10, fontWeight: '900' },

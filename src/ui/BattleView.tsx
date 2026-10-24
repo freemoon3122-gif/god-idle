@@ -12,6 +12,7 @@ import { ActionResult, FieldMonster, GameState, Hit, MoveInput, SkillId } from '
 import { RARITY_INFO, WEAPONS } from '../game/weapons';
 import Svg, { Circle, Defs, RadialGradient, Stop } from 'react-native-svg';
 
+import { FxName } from './art/fx';
 import { Effect, EffectSpec, EffectView } from './effects';
 import { FLOAT_CELLS, heroLayout, HeroSprite } from './HeroSprite';
 import { PixelSprite, spriteSize } from './PixelSprite';
@@ -369,12 +370,17 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
     });
   };
 
-  /** 강한 타격 한 세트: 빛 번짐 + 폭발 + 파편 (+ 광선) */
-  const impact = (x: number, y: number, color: string, scale: number, rays = false) => {
-    add({ kind: 'glow', x, y, color, size: 160 * scale });
-    add({ kind: 'burst', x, y, color, size: 120 * scale });
-    add({ kind: 'debris', x, y, color, count: Math.round(10 * scale), power: 70 * scale });
-    if (rays) add({ kind: 'rays', x, y, color, size: 300 * scale });
+  /**
+   * 도트 이펙트 하나 (assets/fx). w = 화면에서의 폭(pt). 레이드 보스는 크니까 이펙트도 키운다
+   * bottom: true면 (x, y)가 이펙트의 아래 가운데 (번개·촉수·회오리처럼 땅에서 솟는 것)
+   */
+  const fx = (name: FxName, x: number, y: number, w: number, opts: { bottom?: boolean; duration?: number; flip?: boolean; rotate?: number; fromX?: number; fromY?: number } = {}) =>
+    add({ kind: 'fx', name, x, y, width: w * (raid ? 1.7 : 1), anchor: opts.bottom ? 'bottom' : 'center', duration: opts.duration, flip: opts.flip, rotate: opts.rotate, fromX: opts.fromX, fromY: opts.fromY });
+
+  /** 강한 타격 한 세트: 도트 타격 불꽃(크면 폭발) + 파편 */
+  const impact = (x: number, y: number, color: string, scale: number, big = false) => {
+    fx(big ? 'explosion' : 'hit', x, y, (big ? 80 : 56) * scale);
+    add({ kind: 'debris', x, y, color, count: Math.round(8 * scale), power: 70 * scale });
   };
 
   // ───────────── 스킬 시전 연출 (피해가 없는 부분: 배너, 분위기) ─────────────
@@ -388,24 +394,17 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
     add({ kind: 'banner', text: `${skill.name}!`, color, big: isUlt });
 
     if (id === 'zeus_storm') {
+      // 천둥 폭풍: 신 주위에 금빛 오라 + 맵 여기저기 낙뢰
       tintIt('#0A0820', 0.45, 350);
       flashIt('#FFF6B0', 0.6, 260, true);
       shakeIt(9);
-      add({ kind: 'glow', x: p.heroX, y: p.heroY, color: '#FFE97A', size: 220 });
-      for (let i = 0; i < 4; i++) {
-        later(i * 80, () => add({ kind: 'bolt', width, height: HEIGHT, x: 50 + Math.random() * (width - 100), toY: p.groundY, color: '#FFE97A', thick: 6 }));
-      }
+      fx('aura_gold', p.heroX, p.heroY, 120, { duration: 500 });
+      for (let i = 0; i < 4; i++) later(i * 90, () => fx('bolt', 50 + Math.random() * (width - 100), p.groundY, 34, { bottom: true }));
     } else if (id === 'poseidon_trident') {
+      // 삼지창 난무: 푸른 오라 → 10초간 모든 공격 치명타
       flashIt('#9FF3FF', 0.5, 240, true);
-      add({ kind: 'rays', x: p.heroX, y: p.heroY, color: '#6FE3FF', size: 260 });
-      for (let i = 0; i < 5; i++) {
-        later(i * 55, () => {
-          add({ kind: 'thrust', fromX: p.heroX, toX: p.monX + 20, y: p.monY - 30 + i * 14, color: '#6FE3FF' });
-          hitMonsterAnim(undefined, 6);
-        });
-      }
-    } else if (id === 'poseidon_wave') {
-      add({ kind: 'wave', width, height: 190, bottom: GROUND - 8 });
+      fx('aura_blue', p.heroX, p.heroY, 120, { duration: 500 });
+      for (let i = 0; i < 3; i++) later(i * 70, () => hitMonsterAnim(undefined, 6));
     } else if (id === 'zeus_judgment') {
       tintIt('#04030C', 0.75, 1100);
       add({ kind: 'speedlines', width, height: HEIGHT, x: p.monX, y: p.monY, color: '#FFE97A' });
@@ -414,38 +413,20 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
       tintIt('#021A33', 0.75, 1250);
       add({ kind: 'speedlines', width, height: HEIGHT, x: p.monX, y: p.monY, color: '#B48CFF' });
       zoomIt(0.05);
-    } else if (id === 'baby_star') {
-      add({ kind: 'glow', x: p.heroX, y: p.heroY - 30, color: '#FFE27A', size: 110 });
     } else if (id === 'baby_halo') {
-      // 머리 위 후광이 반짝 빛나고 날아간다
-      add({ kind: 'glow', x: p.heroX, y: p.heroY - 45, color: '#FFF3A8', size: 120 });
-      add({ kind: 'rays', x: p.heroX, y: p.heroY - 45, color: '#FFF3A8', size: 150, count: 8 });
-    } else if (id === 'baby_feather') {
-      // 날개를 퍼덕이면 깃털이 사방으로
-      flashIt('#FFFFFF', 0.3, 160);
-      add({ kind: 'debris', x: p.heroX, y: p.heroY, color: '#FFFFFF', count: 14, power: 110 });
-    } else if (id === 'teen_slash') {
-      add({ kind: 'glow', x: p.heroX + 30, y: p.heroY - 20, color: '#7FE8FF', size: 140 });
-    } else if (id === 'teen_dash') {
-      add({ kind: 'glow', x: p.heroX, y: p.heroY, color: '#B8F0FF', size: 130 });
+      fx('holy', p.heroX, p.heroY - 40, 70, { duration: 300 }); // 머리 위 후광이 반짝
     } else if (id === 'teen_laurel') {
-      add({ kind: 'rays', x: p.heroX, y: p.heroY, color: '#7CE08A', size: 220, count: 12 });
-      add({ kind: 'debris', x: p.heroX, y: p.heroY - 20, color: '#7CE08A', count: 12, power: 90 }); // 흩날리는 잎
-    } else if (id === 'adult_whirl') {
-      add({ kind: 'glow', x: p.heroX + 20, y: p.heroY, color: '#FFB347', size: 150 });
-    } else if (id === 'adult_shield') {
-      add({ kind: 'glow', x: p.heroX + 20, y: p.heroY, color: '#E8B04A', size: 150 });
+      fx('leaf', p.heroX, p.heroY, 70);
     } else if (id === 'adult_meteor') {
       // 성인 신의 궁극기: 화면이 어두워지고 하늘로 뛰어오른다
       tintIt('#1A0804', 0.65, 1000);
       add({ kind: 'speedlines', width, height: HEIGHT, x: p.monX, y: p.monY, color: '#FF7A3D' });
-      add({ kind: 'glow', x: p.heroX, y: p.heroY, color: '#FF7A3D', size: 220 });
+      fx('aura_gold', p.heroX, p.heroY, 110);
       zoomIt(0.05);
     } else if (id === 'zeus_gigas') {
       tintIt('#0A0820', 0.5, 900);
       flashIt('#FFE97A', 0.5, 240, true);
-      add({ kind: 'glow', x: p.heroX, y: p.heroY, color: '#FFE97A', size: 220 });
-      add({ kind: 'rays', x: p.heroX, y: p.heroY, color: '#FFD54A', size: 260 });
+      fx('aura_gold', p.heroX, p.heroY, 120);
     } else if (id === 'poseidon_nisyros') {
       tintIt('#021A33', 0.55, 500);
       shakeIt(6);
@@ -498,7 +479,7 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
     if (hit.secondary) {
       // 주 대상 연출이 늦게 떨어지는 스킬(유성·촉수)은 나머지 대상도 같은 만큼 늦게 맞는다
       later(SECONDARY_DELAY[hit.source] ?? 0, () => {
-        add({ kind: 'burst', x: p.monX, y: p.monY, color: skillColor(hit.source as SkillId), size: 80 });
+        fx('hit', p.monX, p.monY, 44);
         hitMonster(10);
         damageText(hit, 20, skillColor(hit.source as SkillId), p);
       });
@@ -553,8 +534,7 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
         const C = '#FFE27A';
         add({ kind: 'orb', fromX: p.monX - 70, fromY: p.monY - 220, toX: p.monX, toY: p.monY, color: C });
         later(160, () => {
-          add({ kind: 'burst', x: p.monX, y: p.monY, color: C, size: 100, spikes: 5 });
-          add({ kind: 'debris', x: p.monX, y: p.monY, color: '#FFF7C2', count: 10, power: 70 });
+          fx('star', p.monX, p.monY, 64);
           hitMonster(12, 40);
           shakeIt(6, 40);
           damageText(hit, 24, C, p);
@@ -562,40 +542,33 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
         return;
       }
       case 'baby_halo': {
-        // 후광 부메랑: 첫 타에 후광이 날아가고, 몬스터 둘레를 금빛 고리가 돌며 3번 벤다
+        // 후광 부메랑: 첫 타에 후광이 날아가고, 몬스터 둘레에서 금빛 고리가 3번 번쩍인다
         const i = combo?.index ?? 0;
-        const C = '#FFF3A8';
         if (i === 0) add({ kind: 'orb', fromX: p.heroX, fromY: p.heroY - 45, toX: p.monX, toY: p.monY, color: '#FFE27A' });
-        later(0, () => {
-          add({ kind: 'crescent', x: p.monX, y: p.monY, angle: i * 120, radius: last ? 80 : 60, color: C, flip: i % 2 === 1 });
-          add({ kind: 'glow', x: p.monX, y: p.monY, color: C, size: last ? 130 : 90 });
-          hitMonster(last ? 14 : 8, last ? 50 : 0);
-          shakeIt(last ? 7 : 3);
-          damageText(hit, last ? 26 : 20, '#FFE27A', p);
-        });
+        fx('slash_gold', p.monX, p.monY, last ? 84 : 66, { rotate: i * 120, flip: i % 2 === 1, duration: 300 });
+        if (last) fx('holy', p.monX, p.monY, 80);
+        hitMonster(last ? 14 : 8, last ? 50 : 0);
+        shakeIt(last ? 7 : 3);
+        damageText(hit, last ? 26 : 20, '#FFE27A', p);
         return;
       }
       case 'baby_feather': {
-        // 깃털 폭풍: 하얀 깃털이 화면을 가로질러 흩날린다
+        // 깃털 폭풍: 하얀 깃털이 몬스터 둘레에 터져 흩날린다
         const i = combo?.index ?? 0;
-        add({ kind: 'thrust', fromX: p.heroX, toX: p.monX + (p.monX >= p.heroX ? 30 : -30), y: p.monY - 30 + i * 12, color: '#FFFFFF' });
-        add({ kind: 'debris', x: p.monX, y: p.monY, color: '#FFFFFF', count: 7, power: 80 });
+        fx('feather', p.monX + [0, -14, 12, -6, 8][i % 5], p.monY + [0, -8, 6, 10, -10][i % 5], last ? 72 : 56);
         hitMonster(last ? 12 : 6);
-        if (last) {
-          add({ kind: 'groundRing', x: p.monX, y: p.groundY - 4, color: '#FFD6E8', size: 200 });
-          shakeIt(6);
-        }
+        if (last) shakeIt(6);
         damageText(hit, last ? 24 : 18, '#FFD6E8', p);
         return;
       }
       case 'teen_dash': {
-        // 섬광 돌진: 잔상을 남기며 끝까지 돌진 → 관통하는 한 줄기 빛 + 히트스톱
+        // 섬광 돌진: 잔상을 남기며 끝까지 돌진 → 빛줄기가 관통 + 히트스톱
         const C = '#B8F0FF';
+        const right = p.monX >= p.heroX;
         dashIt(Math.max(0, p.monX - p.heroX - 20), C);
-        add({ kind: 'thrust', fromX: p.heroX, toX: p.monX + (p.monX >= p.heroX ? 60 : -60), y: p.monY, color: C });
-        add({ kind: 'speedlines', width, height: HEIGHT, x: p.monX, y: p.monY, color: C });
+        fx('dash', (p.heroX + p.monX) / 2, p.monY, Math.max(110, Math.abs(p.monX - p.heroX) + 60), { flip: !right, duration: 260 });
         later(60, () => {
-          impact(p.monX, p.monY, C, 1.4, true);
+          impact(p.monX, p.monY, C, 1.3);
           flashIt(C, 0.6, 220, true);
           zoomIt(0.06);
           hitMonster(26, 90);
@@ -605,15 +578,14 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
         return;
       }
       case 'teen_laurel': {
-        // 월계수 칼날비: 초록 잎 칼날이 몬스터 주변에 비처럼 꽂힌다
+        // 월계수 칼날비: 잎 칼날이 몬스터 주변에 차례로 꽂힌다
         const i = combo?.index ?? 0;
         const C = '#7CE08A';
         const x = p.monX + [-30, 25, -10, 35, -40, 0][i % 6];
-        add({ kind: 'crescent', x, y: p.monY, angle: 60 + i * 50, radius: last ? 70 : 46, color: C, flip: i % 2 === 0 });
-        add({ kind: 'debris', x, y: p.monY, color: C, count: 6, power: 60 });
+        fx('leaf', x, p.monY, last ? 76 : 58);
         hitMonster(last ? 14 : 6, last ? 50 : 0);
         shakeIt(last ? 8 : 3);
-        if (last) add({ kind: 'groundRing', x: p.monX, y: p.groundY - 4, color: C, size: 220 });
+        if (last) fx('slash_green', p.monX, p.monY, 90);
         damageText(hit, last ? 28 : 20, C, p);
         return;
       }
@@ -622,10 +594,8 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
         const C = '#E8B04A';
         dashIt(Math.max(0, p.monX - p.heroX - 50), C);
         later(70, () => {
-          impact(p.monX, p.monY, C, 1.6, true);
-          add({ kind: 'groundRing', x: p.monX, y: p.groundY - 4, color: C, size: 300 });
-          add({ kind: 'debris', x: p.monX, y: p.groundY - 8, color: '#8A6A44', count: 14, power: 110 });
-          add({ kind: 'smoke', x: p.monX, y: p.groundY - 20, count: 6 });
+          impact(p.monX, p.monY, C, 1.4);
+          fx('shockwave', p.monX, p.groundY + 4, 150, { bottom: true, duration: 420 });
           flashIt('#FFE7B0', 0.6, 260, true);
           zoomIt(0.07);
           hitMonster(30, 100);
@@ -638,15 +608,13 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
         // 천공의 일격: 유성이 몬스터 주변에 차례로 떨어지고, 마지막은 신이 직접 내리꽂힌다
         const C = '#FF7A3D';
         const x = last ? p.monX : p.monX + (Math.random() - 0.5) * 150;
-        add({ kind: 'orb', fromX: x - 90, fromY: -40, toX: x, toY: p.groundY - 10, color: C });
+        fx('meteor', x, p.groundY - 14, last ? 56 : 40, { fromX: x - 110, fromY: -40, duration: 160 });
         later(160, () => {
-          add({ kind: 'groundRing', x, y: p.groundY - 4, color: C, size: last ? 340 : 150 });
-          add({ kind: 'debris', x, y: p.groundY - 10, color: '#FFB347', count: last ? 22 : 9, power: last ? 150 : 80 });
-          add({ kind: 'smoke', x, y: p.groundY - 20, count: last ? 8 : 3 });
+          fx('explosion', x, p.groundY - 24, last ? 120 : 76, { duration: 450 });
+          if (last) fx('shockwave', x, p.groundY + 4, 170, { bottom: true });
           hitMonster(last ? 34 : 12, last ? 110 : 20);
           if (last) {
             dashIt(Math.max(0, p.monX - p.heroX - 30), C);
-            impact(p.monX, p.monY, C, 2.1, true);
             flashIt('#FFD9B0', 1, 420, true);
             zoomIt(0.09);
             shakeIt(22, 110);
@@ -659,34 +627,30 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
         return;
       }
       case 'teen_slash': {
-        // 삼연참: 잔상을 남기며 돌진 → 초승달 검기가 X자로 교차 → 마지막은 거대한 횡베기 + 히트스톱
+        // 삼연참: 잔상을 남기며 돌진 → 검기가 X자로 교차 → 마지막은 거대한 횡베기 + 히트스톱
         const i = combo?.index ?? 0;
         const angles = [-35, 35, 0];
         const C = '#7FE8FF';
         dashIt(Math.max(0, p.monX - p.heroX - 40), C);
         later(50, () => {
-          add({ kind: 'crescent', x: p.monX, y: p.monY, angle: angles[i], radius: last ? 95 : 70, color: C, flip: i === 1 });
-          if (last) add({ kind: 'crescent', x: p.monX, y: p.monY + 6, angle: 180, radius: 110, color: '#FFFFFF', flip: true });
-          impact(p.monX, p.monY, C, last ? 1.5 : 0.9, last);
+          fx('slash_cyan', p.monX, p.monY, last ? 110 : 84, { rotate: angles[i], flip: i === 1, duration: 280 });
+          impact(p.monX, p.monY, C, last ? 1.3 : 0.8);
           hitMonster(last ? 26 : 13, last ? 90 : 30);
           shakeIt(last ? 13 : 6, last ? 90 : 30);
           if (last) {
             zoomIt(0.07);
             flashIt(C, 0.6, 260, true);
-            add({ kind: 'speedlines', width, height: HEIGHT, x: p.monX, y: p.monY, color: C });
-            add({ kind: 'groundRing', x: p.monX, y: p.groundY - 4, color: C, size: 220 });
           }
           damageText(hit, last ? 32 : 24, C, p);
         });
         return;
       }
       case 'zeus_bolt': {
+        // 낙뢰: 하늘에서 큰 번개가 몬스터에게 꽂힌다
         const C = '#FFE97A';
-        add({ kind: 'bolt', width, height: HEIGHT, x: p.monX, toY: p.monY, color: C, thick: 12, branches: 3 });
+        fx('bolt', p.monX, p.monY + 18, 54, { bottom: true, duration: 360 });
         flashIt(C, 0.8, 260, true);
-        impact(p.monX, p.monY, C, 1.5, true);
-        add({ kind: 'groundRing', x: p.monX, y: p.groundY - 4, color: C, size: 240 });
-        add({ kind: 'smoke', x: p.monX, y: p.groundY - 20, count: 5 });
+        later(60, () => impact(p.monX, p.monY, C, 1.3, true));
         zoomIt(0.06);
         hitMonster(24, 80);
         shakeIt(15, 80);
@@ -694,10 +658,11 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
         return;
       }
       case 'poseidon_wave': {
+        // 대해일: 큰 파도가 몬스터 무리를 덮치고 물보라
         const C = '#6FE3FF';
+        fx('wave', p.monX - 20, p.groundY + 4, 230, { bottom: true, duration: 460 });
+        later(200, () => fx('splash', p.monX, p.monY, 90));
         flashIt(C, 0.5, 260, true);
-        impact(p.monX, p.monY, C, 1.3);
-        add({ kind: 'debris', x: p.monX, y: p.monY + 20, color: '#E6FBFF', count: 18, power: 120 }); // 물보라
         zoomIt(0.04);
         hitMonster(30, 60);
         shakeIt(12, 60);
@@ -708,18 +673,15 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
         // 올림포스의 심판: 번개 8줄기가 몬스터 주변에 쏟아지고, 마지막은 초대형 번개 + 폭발
         const C = '#FFE97A';
         const x = last ? p.monX : p.monX + (Math.random() - 0.5) * 160;
-        add({ kind: 'bolt', width, height: HEIGHT, x, toY: p.groundY - 6, color: C, thick: last ? 22 : 9, branches: last ? 4 : 2 });
-        add({ kind: 'groundRing', x, y: p.groundY - 4, color: C, size: last ? 320 : 140 });
-        add({ kind: 'debris', x, y: p.groundY - 12, color: C, count: last ? 24 : 8, power: last ? 150 : 70 });
+        fx('bolt', x, p.groundY + 4, last ? 80 : 40, { bottom: true, duration: last ? 420 : 320 });
         hitMonster(last ? 34 : 10, last ? 110 : 0);
         if (last) {
-          impact(p.monX, p.monY, C, 2.2, true);
-          add({ kind: 'smoke', x: p.monX, y: p.groundY - 20, count: 8 });
+          later(80, () => impact(p.monX, p.monY, C, 1.8, true));
           flashIt(C, 1, 450, true);
           zoomIt(0.09);
           shakeIt(22, 110);
         } else {
-          add({ kind: 'glow', x, y: p.groundY - 30, color: C, size: 120 });
+          fx('hit', x, p.groundY - 6, 48);
           flashIt('#FFF6B0', 0.3, 140);
           shakeIt(7);
         }
@@ -732,15 +694,13 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
         const i = combo?.index ?? 0;
         const off = offsets[i % offsets.length];
         const P = '#B48CFF';
-        add({ kind: 'tentacle', x: p.monX + off, bottom: GROUND - 6, height: last ? 250 : 190, tilt: off > 0 ? -10 : 10 });
-        add({ kind: 'debris', x: p.monX + off, y: p.groundY - 6, color: '#9FE7FF', count: 10, power: 80 }); // 땅에서 튀는 물보라
-        add({ kind: 'groundRing', x: p.monX + off, y: p.groundY - 4, color: '#9FE7FF', size: 150 });
+        fx('tentacle', p.monX + off, p.groundY + 4, last ? 70 : 54, { bottom: true, flip: off > 0, duration: 420 });
         later(80, () => {
-          impact(p.monX, p.monY, P, last ? 1.8 : 0.9, last);
+          impact(p.monX, p.monY, P, last ? 1.5 : 0.8);
           hitMonster(last ? 34 : 14, last ? 100 : 30);
           shakeIt(last ? 20 : 8, last ? 100 : 30);
           if (last) {
-            add({ kind: 'wave', width, height: 220, bottom: GROUND - 8 });
+            fx('wave', p.monX - 20, p.groundY + 4, 240, { bottom: true, duration: 460 });
             flashIt('#B8F4FF', 0.9, 420, true);
             zoomIt(0.08);
           }
@@ -753,14 +713,13 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
         const i = combo?.index ?? 0;
         const C = '#FFB347';
         if (i === 0) dashIt(Math.max(0, p.monX - p.heroX - 40), C);
-        add({ kind: 'crescent', x: p.monX, y: p.monY, angle: i * 90, radius: last ? 100 : 72, color: C, flip: i % 2 === 1 });
-        add({ kind: 'crescent', x: p.monX, y: p.monY, angle: i * 90 + 180, radius: last ? 90 : 60, color: '#FFFFFF', flip: i % 2 === 0 });
-        impact(p.monX, p.monY, C, last ? 1.5 : 0.8, last);
+        fx('slash_orange', p.monX, p.monY, last ? 104 : 80, { rotate: i * 90, flip: i % 2 === 1, duration: 260 });
+        impact(p.monX, p.monY, C, last ? 1.2 : 0.7);
         hitMonster(last ? 26 : 12, last ? 90 : 20);
         shakeIt(last ? 13 : 5, last ? 90 : 20);
         if (last) {
           zoomIt(0.06);
-          add({ kind: 'groundRing', x: p.monX, y: p.groundY - 4, color: C, size: 230 });
+          fx('tornado', p.monX, p.groundY + 4, 84, { bottom: true, duration: 480 });
         }
         damageText(hit, last ? 32 : 22, C, p);
         return;
@@ -784,7 +743,7 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
         const C = '#FFE97A';
         const h = heraclesRef.current;
         if (i % 2 === 0 || last) {
-          add({ kind: 'bolt', width, height: HEIGHT, x: p.monX + (last ? 0 : (Math.random() - 0.5) * 60), toY: p.monY, color: C, thick: last ? 18 : 9, branches: 2 });
+          fx('bolt', p.monX + (last ? 0 : (Math.random() - 0.5) * 60), p.monY + 18, last ? 60 : 40, { bottom: true });
           flashIt('#FFF6B0', last ? 0.8 : 0.35, 180, last);
         }
         if (i % 2 === 1 || last) {
@@ -795,10 +754,7 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
         impact(p.monX, p.monY, C, last ? 1.8 : 0.8, last);
         hitMonster(last ? 30 : 12, last ? 100 : 20);
         shakeIt(last ? 18 : 6, last ? 100 : 20);
-        if (last) {
-          zoomIt(0.07);
-          add({ kind: 'groundRing', x: p.monX, y: p.groundY - 4, color: C, size: 280 });
-        }
+        if (last) zoomIt(0.07);
         damageText(hit, last ? 38 : 24, C, p);
         return;
       }
@@ -808,11 +764,9 @@ export const BattleView = forwardRef<BattleHandle, Props>(function BattleView({ 
         const size = Math.max(130, monsterSizeRef.current.w * 1.1);
         add({ kind: 'island', x: p.monX, toY: p.groundY - 10, size });
         later(390, () => {
-          impact(p.monX, p.monY, '#C9A26B', 2, true);
-          add({ kind: 'debris', x: p.monX, y: p.groundY - 10, color: '#7A5A3E', count: 22, power: 150 });
+          impact(p.monX, p.monY, '#C9A26B', 1.8, true);
+          fx('shockwave', p.monX, p.groundY + 4, 180, { bottom: true, duration: 450 });
           add({ kind: 'debris', x: p.monX, y: p.groundY - 10, color: '#5CC46B', count: 10, power: 110 });
-          add({ kind: 'groundRing', x: p.monX, y: p.groundY - 4, color: C, size: 340 });
-          add({ kind: 'smoke', x: p.monX, y: p.groundY - 20, count: 9 });
           flashIt('#FFFFFF', 0.9, 420, true);
           zoomIt(0.1);
           hitMonster(36, 120);
